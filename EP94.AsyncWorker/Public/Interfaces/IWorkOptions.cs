@@ -10,9 +10,23 @@ namespace EP94.AsyncWorker.Public.Interfaces
     public interface IWorkOptions
     {
         /// <summary>
+        /// Configures debounce time. When the task with the same hashcode gets scheduled again within the debounce time of the previous, the previous task gets canceled.
+        /// </summary>
+        /// <param name="hashCode"></param>
+        /// <param name="debounceTime"></param>
+        public void ConfigureDebounce(int hashCode, TimeSpan debounceTime);
+
+        /// <summary>
+        /// Configures the work to wait until the dependent workhandle produces a result that complies to the condition before it gets executed
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="workHandle"></param>
+        /// <param name="condition"></param>
+        public void DependOn<T>(IWorkHandle<T> workHandle, Predicate<T> condition);
+        /// <summary>
         /// Optional side effect when a task fails
         /// </summary>
-        public Func<Exception>? OnFail { get; set; }
+        public Action<Exception>? OnFail { get; set; }
         /// <summary>
         /// The number of retries before the task is considered as failed
         /// </summary>

@@ -18,11 +18,12 @@ namespace EP94.AsyncWorker.Internal.Models
 {
     internal class UnitOfWork<TParameter, TResult>(IWorkDelegate work, IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : WorkBase<TResult>(previous, workScheduler, workFactory, name, cancellationToken), IUnitOfWork<TResult>, IWorkOptions<TResult>
     {
+
         public IWorkDelegate Work { get; } = work;
 
-        public Predicate<TResult?>? SucceedsWhen { get; set; }
-        public Predicate<TResult?>? FailsWhen { get; set; }
-        public Func<Exception?>? OnFail { get; set; }
+        public Predicate<TResult>? SucceedsWhen { get; set; }
+        public Predicate<TResult>? FailsWhen { get; set; }
+        public Action<Exception>? OnFail { get; set; }
         public int? RetryCount { get; set; }
         public int MaxRetryDelay { get; set; }
 
@@ -54,10 +55,11 @@ namespace EP94.AsyncWorker.Internal.Models
                     }
                 },
                 onCanceled: () => {
-                    SetCanceled();
+                    DoSetCanceled();
                 },
                 onFail: e =>
                 {
+                    OnFail?.Invoke(e);
                     if (executionContext.ExecutionCounter <= RetryCount)
                     {
                         double seconds = Math.Min(Math.Pow(2, executionContext.ExecutionCounter), 30);
@@ -73,7 +75,7 @@ namespace EP94.AsyncWorker.Internal.Models
                 executionStack.LastResult);
         }
 
-        public override void SetCanceled()
+        protected override void DoSetCanceled()
         {
             Next.SetCanceled();
             _subject.OnCompleted();

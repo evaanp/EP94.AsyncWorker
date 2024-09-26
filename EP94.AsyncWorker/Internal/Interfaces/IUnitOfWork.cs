@@ -13,6 +13,9 @@ namespace EP94.AsyncWorker.Internal.Interfaces
 {
     public interface IUnitOfWork
     {
+        internal TimeSpan? DebounceTime { get; }
+        internal int? HashCode { get; }
+        internal IDependOnCondition? DependsOn { get; }
         internal string? Name { get; }
         internal bool HasNext { get; }
         internal IWorkCollection Next { get; }
@@ -21,7 +24,7 @@ namespace EP94.AsyncWorker.Internal.Interfaces
         internal Task ExecuteAsync(ExecutionStack executionStack);
         internal void SetException(Exception exception);
         internal void SetCanceled();
-        internal Task WaitForNextExecutionAsync(DateTime next, CancellationToken cancellationToken);
+        internal Task<bool> WaitForNextExecutionAsync(DateTime next, CancellationToken cancellationToken);
         internal void NotifyStart();
         internal ISubject<T> CreateSubject<T>();
     }

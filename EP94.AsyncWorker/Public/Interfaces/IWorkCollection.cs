@@ -7,8 +7,9 @@ using EP94.AsyncWorker.Internal.Interfaces;
 
 namespace EP94.AsyncWorker.Public.Interfaces
 {
-    public interface IWorkCollection : IEnumerable<IUnitOfWork>
+    internal interface IWorkCollection : IEnumerable<IConditionalWork>
     {
+        void ScheduleNext(ExecutionStack executionStack);
         void SetException(Exception exception);
         void SetCanceled();
     }

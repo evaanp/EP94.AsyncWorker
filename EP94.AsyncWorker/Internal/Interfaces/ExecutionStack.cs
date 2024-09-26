@@ -10,6 +10,7 @@ namespace EP94.AsyncWorker.Internal.Interfaces
 {
     internal class ExecutionStack
     {
+        public DateTime TimeStamp { get; } = DateTime.UtcNow;
         public object? LastResult { get; set; }
         private Stack<IExecutionContext> _innerStack = new Stack<IExecutionContext>();
 

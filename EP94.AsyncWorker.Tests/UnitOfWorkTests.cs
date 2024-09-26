@@ -1,6 +1,7 @@
 using EP94.AsyncWorker.Public.Exceptions;
 using EP94.AsyncWorker.Public.Interfaces;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
+using System.Diagnostics;
 
 namespace EP94.AsyncWorker.Tests
 {
@@ -112,6 +113,87 @@ namespace EP94.AsyncWorker.Tests
             }
             await Task.WhenAll(workHandles.Select(x => x.AsTask()));
             Assert.Equal(expectedValues, results);
+        }
+
+        [Fact]
+        public async Task TestSameHashCode()
+        {
+            IWorkFactory workFactory = CreateDefaultWorkFactory();
+            List<int> results = new List<int>();
+            int[] values = Enumerable.Range(0, 100).ToArray();
+            List<IWorkHandle> workHandles = [];
+            for (int i = 0; i < values.Length; i++)
+            {
+                int index = i;
+                IWorkHandle workHandle = workFactory.CreateWork((c) =>
+                {
+                    results.Add(values[index]);
+                    return Task.CompletedTask;
+                }, options => options.ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(50)));
+                workHandles.Add(workHandle);
+            }
+            foreach (IWorkHandle workHandle in workHandles)
+            {
+                workHandle
+                    .Run();
+            }
+            foreach (IWorkHandle workHandle in workHandles)
+            {
+                if (workHandle != workHandles.Last())
+                {
+                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await workHandle);
+                }
+                else
+                {
+                    await workHandle;
+                }
+            }
+            //await Task.WhenAll(workHandles.Select(x => x.AsTask()));
+            Assert.Equal([values.Last()], results);
+        }
+
+        [Fact]
+        public async Task TestSameHashCodeDependOnTrigger()
+        {
+            IWorkFactory workFactory = CreateDefaultWorkFactory();
+            List<int> results = new List<int>();
+            int[] values = Enumerable.Range(0, 100).ToArray();
+            List<IWorkHandle> workHandles = [];
+            ITrigger<bool> trigger = workFactory.CreateTriggerAsync(false, false);
+            for (int i = 0; i < values.Length; i++)
+            {
+                int index = i;
+                IWorkHandle workHandle = workFactory.CreateWork((c) =>
+                {
+                    results.Add(values[index]);
+                    return Task.CompletedTask;
+                }, options => 
+                {
+                    options.ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(50));
+                    options.DependOn(trigger, value => value);
+                }, name: index.ToString());
+                workHandles.Add(workHandle);
+            }
+            foreach (IWorkHandle workHandle in workHandles)
+            {
+                workHandle
+                    .Run();
+            }
+            await Task.Delay(2000);
+            trigger.OnNext(true);
+            foreach (IWorkHandle workHandle in workHandles)
+            {
+                if (workHandle != workHandles.Last())
+                {
+                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await workHandle);
+                }
+                else
+                {
+                    await workHandle;
+                }
+            }
+            //await Task.WhenAll(workHandles.Select(x => x.AsTask()));
+            Assert.Equal([values.Last()], results);
         }
 
         [Fact]

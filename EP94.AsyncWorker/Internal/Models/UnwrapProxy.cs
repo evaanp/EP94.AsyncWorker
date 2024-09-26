@@ -85,6 +85,11 @@ namespace EP94.AsyncWorker.Internal.Models
 
         public override ISubject<T1> CreateSubject<T1>() => new ReplaySubject<T1>(1);
 
+        protected override void DoSetCanceled()
+        {
+            
+        }
+
         private class SubscriptionProxy(IObserver<T> observer) : IDisposable
         {
             public IObserver<T> Observer = observer;

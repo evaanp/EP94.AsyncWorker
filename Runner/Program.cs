@@ -13,7 +13,7 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 IWorkFactory workFactory = IWorkFactory.Create(5, cancellationToken: CancellationToken.None);
 
 
-var trigger = workFactory.CreateTriggerAsync<int>("Trigger");
+var trigger = workFactory.CreateTriggerAsync<int>(false, "Trigger");
 
 
 

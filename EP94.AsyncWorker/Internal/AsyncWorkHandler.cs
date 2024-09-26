@@ -2,6 +2,7 @@
 using EP94.AsyncWorker.Internal.Models;
 using EP94.AsyncWorker.Internal.Utils;
 using EP94.AsyncWorker.Public.Interfaces;
+using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading;
@@ -23,6 +24,8 @@ namespace EP94.AsyncWorker.Internal
         private SemaphoreSlim _activeWorkSemaphore;
         private ConcurrentDictionary<long, Lazy<Task>> _runningTasks;
         private long _workIdCounter;
+        private Dictionary<int, DebounceItem> _debounceWork;
+        private SemaphoreSlim _debounceWorkSemaphore;
         public AsyncWorkHandler(int maxLevelOfConcurrency, TaskScheduler taskScheduler, TimeSpan? defaultTimeout, CancellationToken cancellationToken = default)
         {
             //_workQueue = new ConcurrentWorkQueue(maxLevelOfConcurrency);
@@ -35,51 +38,62 @@ namespace EP94.AsyncWorker.Internal
             _defaultTimeout = defaultTimeout;
             _activeWorkSemaphore = new SemaphoreSlim(maxLevelOfConcurrency);
             _runningTasks = new ConcurrentDictionary<long, Lazy<Task>>();
+            _debounceWork = new Dictionary<int, DebounceItem>();
+            _debounceWorkSemaphore = new SemaphoreSlim(1);
         }
 
         private async Task QueueBusyListenerAsync()
         {
             while (!_stopCts.IsCancellationRequested)
             {
-                await _workQueue.AwaitWorkAsync(_stopCts.Token);
-                await _activeWorkSemaphore.WaitAsync(_stopCts.Token);
-                long id = _workIdCounter++;
-                Lazy<Task> task = _runningTasks[id] = new Lazy<Task>(() => _taskFactory.StartNew(() => HandleWorkAsync(id), _stopCts.Token));
-                _ = task.Value;
+                ExecuteWorkItem workItem = await _workQueue.AwaitWorkAsync(_stopCts.Token);
+                if (!workItem.UnitOfWork.DebounceTime.HasValue)
+                {
+                    await ScheduleWorkAsync(workItem);
+                }
+                else
+                {
+                    await ScheduleDebounceAsync(workItem);
+                }
             }
         }
 
-        private async Task HandleWorkAsync(long workerId)
+        private async Task ScheduleWorkAsync(ExecuteWorkItem workItem)
+        {
+            await _activeWorkSemaphore.WaitAsync(_stopCts.Token);
+            long id = _workIdCounter++;
+            Lazy<Task> task = _runningTasks[id] = new Lazy<Task>(() => _taskFactory.StartNew(() => HandleWorkAsync(id, workItem), _stopCts.Token));
+            _ = task.Value;
+        }
+
+        private async Task HandleWorkAsync(long workerId, ExecuteWorkItem item)
         {
             List<IDisposable> disposables = new List<IDisposable>();
-            if (_workQueue.TryDequeue(out ExecuteWorkItem? item))
+            //Debug.WriteLine($"Worker {workerId}: Executing workitem: '{item.UnitOfWork.Name}', next count: '{item.UnitOfWork.Next.Count()}'");
+            try
             {
-                //Debug.WriteLine($"Worker {workerId}: Executing workitem: '{item.UnitOfWork.Name}', next count: '{item.UnitOfWork.Next.Count()}'");
-                try
+                CancellationToken cancellationToken;
+                if (_defaultTimeout.HasValue)
                 {
-                    CancellationToken cancellationToken;
-                    if (_defaultTimeout.HasValue)
-                    {
-                        CancellationTokenSource timeoutSource = new CancellationTokenSource(_defaultTimeout.Value);
-                        CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token, _stopCts.Token);
-                        disposables.AddRange([timeoutSource, linkedSource]);
-                        cancellationToken = linkedSource.Token;
-                    }
-                    else
-                    {
-                        cancellationToken = _stopCts.Token;
-                    }
+                    CancellationTokenSource timeoutSource = new CancellationTokenSource(_defaultTimeout.Value);
+                    CancellationTokenSource linkedSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token, _stopCts.Token);
+                    disposables.AddRange([timeoutSource, linkedSource]);
+                    cancellationToken = linkedSource.Token;
+                }
+                else
+                {
+                    cancellationToken = _stopCts.Token;
+                }
 
-                    await item.UnitOfWork.ExecuteAsync(item.ExecutionStack).WaitAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (TaskCanceledException)
-                {
-                    item.UnitOfWork.SetCanceled();
-                }
-                catch (OperationCanceledException)
-                {
-                    item.UnitOfWork.SetCanceled();
-                }
+                await item.UnitOfWork.ExecuteAsync(item.ExecutionStack).WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                item.UnitOfWork.SetCanceled();
+            }
+            catch (OperationCanceledException)
+            {
+                item.UnitOfWork.SetCanceled();
             }
             if (!_runningTasks.Remove(workerId, out Lazy<Task>? _))
             {
@@ -87,7 +101,66 @@ namespace EP94.AsyncWorker.Internal
             }
             _activeWorkSemaphore.Release();
             disposables.ForEach(x => x.Dispose());
-            
+        }
+
+        public async Task ScheduleDebounceAsync(ExecuteWorkItem executeWorkItem)
+        {
+            if (executeWorkItem.UnitOfWork.HashCode is null)
+            {
+                throw new InvalidOperationException("HashCode is null");
+            }
+            await _debounceWorkSemaphore.WaitAsync();
+            try
+            { 
+                if (_debounceWork.TryGetValue(executeWorkItem.UnitOfWork.HashCode.Value, out DebounceItem? debounceItem))
+                {
+                    if (debounceItem.WorkItem.TimeStamp > executeWorkItem.TimeStamp)
+                    {
+                        executeWorkItem.UnitOfWork.SetCanceled();
+                        return;
+                    }
+                    debounceItem.Update(executeWorkItem);
+                }
+                else
+                {
+                    _debounceWork.Add(executeWorkItem.UnitOfWork.HashCode.Value, new DebounceItem(executeWorkItem));
+                }
+                _waitTasks.TryAdd(executeWorkItem.UnitOfWork, WaitForDebounceAsync(executeWorkItem));
+            }
+            finally
+            {
+                _debounceWorkSemaphore.Release();
+            }
+        }
+
+        private async Task WaitForDebounceAsync(ExecuteWorkItem executeWorkItem)
+        {
+            if (executeWorkItem.UnitOfWork.DebounceTime is null)
+            {
+                throw new InvalidOperationException("DebounceTime is null");
+            }
+            if (executeWorkItem.UnitOfWork.HashCode is null)
+            {
+                throw new InvalidOperationException("HashCode is null");
+            }
+            try
+            {
+                if (await executeWorkItem.UnitOfWork.WaitForNextExecutionAsync(DateTime.UtcNow.Add(executeWorkItem.UnitOfWork.DebounceTime.Value), _stopCts.Token).WaitAsync(_stopCts.Token))
+                {
+                    await _debounceWorkSemaphore.WaitAsync();
+                    if (_debounceWork.TryGetValue(executeWorkItem.UnitOfWork.HashCode.Value, out DebounceItem? item) && ReferenceEquals(item.WorkItem, executeWorkItem))
+                    {
+                        _debounceWork.Remove(executeWorkItem.UnitOfWork.HashCode.Value);
+                    }
+                    _debounceWorkSemaphore.Release();
+                    
+                    await ScheduleWorkAsync(executeWorkItem);
+                }
+            }
+            finally
+            {
+                _waitTasks.Remove(executeWorkItem.UnitOfWork, out Task? _);
+            }
         }
 
         public async ValueTask DisposeAsync()
@@ -103,17 +176,35 @@ namespace EP94.AsyncWorker.Internal
             {
                 _waitTasks.TryAdd(unitOfWork, WaitForNextExecutionAsync(unitOfWork, dateTime.Value, executionStack));
             }
+            else if (unitOfWork.DependsOn is IDependOnCondition dependOnCondition)
+            {
+                _waitTasks.TryAdd(unitOfWork, WaitForDependsOnConditionAsync(unitOfWork, dependOnCondition, executionStack));
+            }
             else
             {
                 _workQueue.ScheduleWork(unitOfWork, executionStack);
             }
         }
 
+        private async Task WaitForDependsOnConditionAsync(IUnitOfWork unitOfWork, IDependOnCondition dependsOnCondition, ExecutionStack executionStack)
+        {
+            await dependsOnCondition.WaitForConditionAsync(_stopCts.Token);
+            _workQueue.ScheduleWork(unitOfWork, executionStack);
+        }
+
         private async Task WaitForNextExecutionAsync(IUnitOfWork unitOfWork, DateTime dateTime, ExecutionStack executionStack)
         {
-            await unitOfWork.WaitForNextExecutionAsync(dateTime, _stopCts.Token).WaitAsync(_stopCts.Token);
-            ScheduleWork(unitOfWork, null, executionStack);
-            _waitTasks.TryRemove(unitOfWork, out Task? _);
+            try
+            {
+                if (await unitOfWork.WaitForNextExecutionAsync(dateTime, _stopCts.Token).WaitAsync(_stopCts.Token))
+                {
+                    ScheduleWork(unitOfWork, null, executionStack);
+                }
+            }
+            finally
+            {
+                _waitTasks.TryRemove(unitOfWork, out Task? _);
+            }
         }
     }
 }

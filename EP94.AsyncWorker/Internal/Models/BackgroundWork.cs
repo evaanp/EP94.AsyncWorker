@@ -47,7 +47,7 @@ namespace EP94.AsyncWorker.Internal.Models
             WorkScheduler.ScheduleWork(this, DateTime.UtcNow.Add(_interval), executionStack);
         }
 
-        public override void SetCanceled()
+        protected override void DoSetCanceled()
         {
             _subject.OnCompleted();
         }
