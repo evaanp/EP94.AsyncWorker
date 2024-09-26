@@ -25,15 +25,17 @@ namespace EP94.AsyncWorker.Internal.Models
         public IWorkHandle CreateWork<TParam>(IUnitOfWork<TParam> previous, ActionWorkDelegate<TParam> work, ConfigureAction? configureAction, string? name = null, CancellationToken cancellationToken = default) => ConfigureVoid(new UnitOfWork<Empty>(WorkDelegate.Create(work), previous, _workHandler, this, name, cancellationToken), configureAction);
         public ValueTask DisposeAsync() => _workHandler.DisposeAsync();
 
-        private IWorkHandle<T> Configure<T>(IWorkOptions<T?> t, ConfigureAction<T>? configureAction)
+        private IWorkHandle<T> Configure<T>(IWorkOptions<T> t, ConfigureAction<T>? configureAction)
         {
             configureAction?.Invoke(t);
+            t.OnOptionsSet();
             return (IWorkHandle<T>)t;
         }
 
         private T ConfigureVoid<T>(T t, ConfigureAction? configureAction) where T : IWorkOptions
         {
             configureAction?.Invoke(t);
+            t.OnOptionsSet();
             return t;
         }
     }

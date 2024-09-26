@@ -18,6 +18,7 @@ namespace EP94.AsyncWorker.Internal.Models
 {
     internal abstract class WorkBase<TResult>(IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : IUnitOfWork<TResult>
     {
+        public RetainResult RetainResult { get; set; }
         public int? HashCode { get; private set; }
         public TimeSpan? DebounceTime { get; private set; }
         public IDependOnCondition? DependsOn { get; private set; }
@@ -153,6 +154,7 @@ namespace EP94.AsyncWorker.Internal.Models
             DoSetCanceled();
         }
         protected abstract void DoSetCanceled();
+        public virtual void OnOptionsSet() { }
 
         public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, string? name = null) => Then(task, configureAction, null, name);
         public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)

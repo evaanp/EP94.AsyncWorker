@@ -28,7 +28,7 @@ namespace EP94.AsyncWorker.Internal.Models
         public int MaxRetryDelay { get; set; }
 
         private bool _hasNeverRan = true;
-        private ISubject<TResult> _subject = previous?.CreateSubject<TResult>() ?? new Subject<TResult>();
+        private ISubject<TResult> _subject;
 
         protected override async Task DoExecuteAsync(ExecutionStack executionStack)
         {
@@ -95,25 +95,34 @@ namespace EP94.AsyncWorker.Internal.Models
 
         public override void NotifyStart()
         {
-            if (Previous is not null)
+            lock (this)
             {
-                Previous.NotifyStart();
-            }
-            else if (_hasNeverRan)
-            {
-                _hasNeverRan = false;
-                ExecutionStack executionStack = new ExecutionStack();
-                WorkScheduler.ScheduleWork(this, null, executionStack);
+                if (Previous is not null)
+                {
+                    Previous.NotifyStart();
+                }
+                else if (_hasNeverRan)
+                {
+                    _hasNeverRan = false;
+                    ExecutionStack executionStack = new ExecutionStack();
+                    WorkScheduler.ScheduleWork(this, null, executionStack);
+                }
             }
         }
 
         public override ISubject<T> CreateSubject<T>()
         {
-            if (Previous is not null)
+            return RetainResult switch
             {
-                return Previous.CreateSubject<T>();
-            }
-            return new Subject<T>();
+                Public.Models.RetainResult.Inherit => Previous?.CreateSubject<T>() ?? new Subject<T>(),
+                Public.Models.RetainResult.RetainLast => new ReplaySubject<T>(1),
+                _ => new Subject<T>(),
+            };
+        }
+
+        public override void OnOptionsSet()
+        {
+            _subject = CreateSubject<TResult>();
         }
     }
     internal class UnitOfWork<TResult>(IWorkDelegate work, IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) 

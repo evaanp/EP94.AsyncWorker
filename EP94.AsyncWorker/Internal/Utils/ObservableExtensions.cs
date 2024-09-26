@@ -8,19 +8,21 @@ namespace EP94.AsyncWorker.Internal.Utils
 {
     public static class ObservableExtensions
     {
+        public static int Counter;
         public static Task<T> ToOnceTask<T>(this IObservable<T> observable, Action? runAfterSubscription = null, CancellationToken cancellationToken = default)
         {
-            TaskCompletionSource<T> tcs = new TaskCompletionSource<T>();
+            TaskCompletionSource<T> tcs = new TaskCompletionSource<T>(cancellationToken);
             var subscription = observable.Subscribe(x =>
             {
+                Interlocked.Increment(ref Counter);
                 tcs.TrySetResult(x);
             }, onCompleted: tcs.SetCanceled, onError: tcs.SetException);
             runAfterSubscription?.Invoke();
-            return tcs.Task.WaitAsync(cancellationToken).ContinueWith(t =>
+            return tcs.Task.ContinueWith(t =>
             {
                 subscription.Dispose();
                 return t;
-            }, cancellationToken).Unwrap().WaitAsync(cancellationToken);
+            }, cancellationToken).Unwrap();
         }
     }
 }

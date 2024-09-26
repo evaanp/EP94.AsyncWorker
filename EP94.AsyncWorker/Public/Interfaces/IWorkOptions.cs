@@ -1,4 +1,5 @@
 ﻿using EP94.AsyncWorker.Internal.Models;
+using EP94.AsyncWorker.Public.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,10 @@ namespace EP94.AsyncWorker.Public.Interfaces
 {
     public interface IWorkOptions
     {
+        /// <summary>
+        /// Specifies the way the work handles the latest result
+        /// </summary>
+        public RetainResult RetainResult { get; set; }
         /// <summary>
         /// Configures debounce time. When the task with the same hashcode gets scheduled again within the debounce time of the previous, the previous task gets canceled.
         /// </summary>
@@ -35,6 +40,8 @@ namespace EP94.AsyncWorker.Public.Interfaces
         /// The maximum delay in seconds between retries, default = 30 
         /// </summary>
         public int MaxRetryDelay { get; set; }
+
+        internal void OnOptionsSet();
     }
 
     public interface IWorkOptions<TResult> : IWorkOptions

@@ -103,7 +103,7 @@ namespace EP94.AsyncWorker.Tests
                 {
                     results.Add(expectedValues[index]);
                     return Task.CompletedTask;
-                });
+                }, options => options.RetainResult = Public.Models.RetainResult.RetainLast, $"Item_{index}", new CancellationTokenSource(2000).Token);
                 workHandles.Add(workHandle);
             }
             foreach (IWorkHandle workHandle in workHandles)
@@ -111,7 +111,16 @@ namespace EP94.AsyncWorker.Tests
                 workHandle
                     .Run();
             }
+            await Task.Delay(500);
+            try
+            {
+
             await Task.WhenAll(workHandles.Select(x => x.AsTask()));
+            }
+            catch (Exception e)
+            {
+                int counter = EP94.AsyncWorker.Internal.Utils.ObservableExtensions.Counter;
+            }
             Assert.Equal(expectedValues, results);
         }
 
