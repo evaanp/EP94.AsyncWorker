@@ -13,7 +13,7 @@ namespace EP94.AsyncWorker.Internal
 {
     internal class AsyncWorkHandler : IWorkScheduler, IAsyncDisposable
     {
-        private Task _queueBusyListenerTask;
+        private Task _workQueueListenerTask;
         //private Task[] _workers;
         private ConcurrentDictionary<IUnitOfWork, Task> _waitTasks;
         private ConcurrentWorkQueue _workQueue;
@@ -28,12 +28,11 @@ namespace EP94.AsyncWorker.Internal
         private SemaphoreSlim _debounceWorkSemaphore;
         public AsyncWorkHandler(int maxLevelOfConcurrency, TaskScheduler taskScheduler, TimeSpan? defaultTimeout, CancellationToken cancellationToken = default)
         {
-            //_workQueue = new ConcurrentWorkQueue(maxLevelOfConcurrency);
-            _workQueue = new ConcurrentWorkQueue(1);
+            _workQueue = new ConcurrentWorkQueue();
             _stopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _taskFactory = new TaskFactory(taskScheduler);
             _workers = new Dictionary<int, Task>(maxLevelOfConcurrency);
-            _queueBusyListenerTask = _taskFactory.StartNew(QueueBusyListenerAsync);
+            _workQueueListenerTask = _taskFactory.StartNew(WorkQueueListenerAsync);
             _waitTasks = new ConcurrentDictionary<IUnitOfWork, Task>();
             _defaultTimeout = defaultTimeout;
             _activeWorkSemaphore = new SemaphoreSlim(maxLevelOfConcurrency);
@@ -42,7 +41,7 @@ namespace EP94.AsyncWorker.Internal
             _debounceWorkSemaphore = new SemaphoreSlim(1);
         }
 
-        private async Task QueueBusyListenerAsync()
+        private async Task WorkQueueListenerAsync()
         {
             while (!_stopCts.IsCancellationRequested)
             {

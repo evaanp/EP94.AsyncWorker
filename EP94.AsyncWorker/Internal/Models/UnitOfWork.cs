@@ -43,6 +43,7 @@ namespace EP94.AsyncWorker.Internal.Models
                 executionContext = (ExecutionContext<TResult?>)previousContext;
             }
             executionContext.ExecutionCounter++;
+
             await SafeExecuteAsync(Work,
                 onSuccess: result =>
                 {
