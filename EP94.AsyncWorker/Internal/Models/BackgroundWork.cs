@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reactive.Subjects;
 using System.Text;
 using EP94.AsyncWorker.Internal.Models;
+using System.Reactive.Linq;
 
 namespace EP94.AsyncWorker.Internal.Models
 {

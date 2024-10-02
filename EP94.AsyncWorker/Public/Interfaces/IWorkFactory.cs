@@ -11,8 +11,9 @@ namespace EP94.AsyncWorker.Public.Interfaces
 {
     public interface IWorkFactory : IAsyncDisposable
     {
-        ITrigger<TParam> CreateTriggerAsync<TParam>(bool triggerOnlyOnChanges = false, string? name = null);
-        ITrigger<TParam> CreateTriggerAsync<TParam>(TParam? initialValue, bool triggerOnlyOnChanges = false, string? name = null);
+        IWorkHandle<T> CreateTimebasedTrigger<T>(FuncWorkDelegate<T> work, DateTime firstRun, Func<DateTime> getNextTimeFunc, string? name = null, CancellationToken cancellationToken = default);
+        ITrigger<TParam> CreateTriggerAsync<TParam>(bool triggerOnlyOnChanges = false, string? name = null, IEqualityComparer<TParam>? equalityComparer = null);
+        ITrigger<TParam> CreateTriggerAsync<TParam>(TParam? initialValue, bool triggerOnlyOnChanges = false, string? name = null, IEqualityComparer<TParam>? equalityComparer = null);
         IBackgroundWork<TResult> CreateBackgroundWork<TResult>(FuncWorkDelegate<TResult> work, TimeSpan interval, Func<bool>? predicate = null, string? name = null, CancellationToken cancellationToken = default);
         IBackgroundWork CreateBackgroundWork(ActionWorkDelegate work, TimeSpan interval, Func<bool>? predicate = null, string? name = null, CancellationToken cancellationToken = default);
         IWorkHandle<TResult> CreateWork<TResult>(FuncWorkDelegate<TResult> work, ConfigureAction<TResult>? configureAction = null, string? name = null, CancellationToken cancellationToken = default);

@@ -15,6 +15,10 @@ namespace EP94.AsyncWorker.Internal.Models
         private Predicate<T> _condition = condition;
         public Task WaitForConditionAsync(CancellationToken cancellationToken)
         {
+            if (_dependsOn is null)
+            {
+                return Task.CompletedTask;
+            }
             TaskCompletionSource taskCompletionSource = new TaskCompletionSource(cancellationToken);
             IDisposable disposable = _dependsOn.Subscribe(x =>
             {

@@ -70,6 +70,11 @@ namespace EP94.AsyncWorker.Internal.Models
         public virtual void SetException(Exception exception) { }
         public abstract void NotifyStart();
         public void Run() => NotifyStart();
+        public IObservable<TResult> RunAsObservable()
+        {
+            Run();
+            return this;
+        }
 
         public IWorkHandle<T> Unwrap<T>()
         {
@@ -156,6 +161,31 @@ namespace EP94.AsyncWorker.Internal.Models
         protected abstract void DoSetCanceled();
         public virtual void OnOptionsSet() { }
 
+        public IWorkHandle Then(Action task, ConfigureAction? configureAction = null, string? name = null)
+        {
+            return Then((_) =>
+            {
+                task();
+                return Task.CompletedTask;
+            }, configureAction, name);
+        }
+
+        public IWorkHandle<TNextResult> Then<TNextResult>(Func<TResult, TNextResult> task, ConfigureAction<TNextResult>? configureAction = null, Predicate<TResult>? condition = null, string? name = null)
+        {
+            return Then((result, _) =>
+            {
+                return Task.FromResult(task(result));
+            }, configureAction, condition, name);
+        }
+
+        public IWorkHandle Then(Action<TResult> task, ConfigureAction? configureAction = null, Predicate<TResult>? condition = null, string? name = null)
+        {
+            return Then((result, _) =>
+            {
+                task(result);
+                return Task.CompletedTask;
+            }, configureAction, condition, name);
+        }
         public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, string? name = null) => Then(task, configureAction, null, name);
         public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)
         {
@@ -181,25 +211,25 @@ namespace EP94.AsyncWorker.Internal.Models
 
         public IWorkHandle<TNextResult> Then<TNextResult>(IWorkHandle<TNextResult> task)
         {
-            IUnitOfWork first = (IUnitOfWork)task;
-            while (first.Previous is not null)
-            {
-                first = first.Previous;
-            }
+            IUnitOfWork first = (IUnitOfWork)task.First;
             first.Previous = this;
             _next.Add(new ConditionalWork((IUnitOfWork)task));
             return task;
         }
 
-        public IWorkHandle Then(IWorkHandle task)
+        public IWorkHandle<TNextResult> Then<TNextResult>(IWorkHandle<TNextResult> task, Predicate<TResult>? condition = null)
         {
-            IUnitOfWork first = (IUnitOfWork)task;
-            while (first.Previous is not null)
-            {
-                first = first.Previous;
-            }
+            IUnitOfWork first = (IUnitOfWork)task.First;
             first.Previous = this;
-            _next.Add(new ConditionalWork((IUnitOfWork)task));
+            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)task, condition));
+            return task;
+        }
+
+        public IWorkHandle Then(IWorkHandle task) => Then(task, null);
+        public IWorkHandle Then(IWorkHandle task, Predicate<TResult>? condition = null)
+        {
+            IUnitOfWork first = (IUnitOfWork)task.First;
+            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)task, condition));
             return task;
         }
 

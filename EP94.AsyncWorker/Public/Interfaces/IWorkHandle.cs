@@ -20,6 +20,7 @@ namespace EP94.AsyncWorker.Public.Interfaces
     {
         new TaskAwaiter<TResult> GetAwaiter();
         new Task<TResult> AsTask();
+        IObservable<TResult> RunAsObservable();
     }
     public interface IWorkHandle<TParam, TResult> : IWorkHandle<TResult>
     {

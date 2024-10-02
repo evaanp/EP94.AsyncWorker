@@ -18,14 +18,16 @@ namespace EP94.AsyncWorker.Internal.Models
         private ReplaySubject<T> _subject = new ReplaySubject<T>(1);
         private bool _triggerOnlyOnChanges;
         private T? _lastValue;
+        private IEqualityComparer<T> _comparer;
 
-        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, bool triggerOnlyOnChanges, CancellationToken cancellationToken) : base(null, workScheduler, workFactory, name, cancellationToken)
+        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : base(null, workScheduler, workFactory, name, cancellationToken)
         {
             _triggerOnlyOnChanges = triggerOnlyOnChanges;
             _subject.Subscribe(x => _lastValue = x);
+            _comparer = equalityComparer;
         }
 
-        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, T? initialValue, string? name, bool triggerOnlyOnChanges, CancellationToken cancellationToken) : this(workScheduler, workFactory, name, triggerOnlyOnChanges, cancellationToken)
+        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, T? initialValue, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : this(workScheduler, workFactory, name, triggerOnlyOnChanges, equalityComparer, cancellationToken)
         { 
             if (initialValue is not null)
             {
@@ -35,7 +37,7 @@ namespace EP94.AsyncWorker.Internal.Models
 
         public void OnNext(T param)
         {
-            if (!_triggerOnlyOnChanges || !Equals(param, _lastValue))
+            if (!_triggerOnlyOnChanges || !_comparer.Equals(param, _lastValue))
             {
                 ExecutionStack executionStack = new ExecutionStack();
                 ExecutionContext<T> executionContext = new ExecutionContext<T>(this);
