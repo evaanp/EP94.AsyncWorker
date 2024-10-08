@@ -1,4 +1,5 @@
-﻿using System;
+﻿using EP94.AsyncWorker.Internal.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +9,8 @@ namespace EP94.AsyncWorker.Internal.Interfaces
 {
     internal interface IWorkScheduler
     {
-        void ScheduleWork(IUnitOfWork unitOfWork, DateTime? dateTime, ExecutionStack executionStack);
+        TimeSpan? DefaultTimeout { get; }
+        CancellationToken StopToken { get; }
+        void ScheduleWork(ExecuteWorkItem executeWorkItem, DateTime? dateTime);
     }
 }

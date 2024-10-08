@@ -8,7 +8,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reactive;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Reactive.Threading.Tasks;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
@@ -16,80 +19,63 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    internal abstract class WorkBase<TResult>(IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : IUnitOfWork<TResult>
+    internal abstract class WorkBase<TParameter, TResult> : ObservableWorkBase<TResult>, IUnitOfWork, IParameterWorkHandle<TParameter>, IResultWorkHandle<TResult>
     {
         public RetainResult RetainResult { get; set; }
         public int? HashCode { get; private set; }
         public TimeSpan? DebounceTime { get; private set; }
-        public IDependOnCondition? DependsOn { get; private set; }
-        public string? Name { get; } = name;
-        public bool HasNext => _next.Any();
-        public IUnitOfWork? Previous 
-        {
-            get => _previous;
-            set
-            {
-                ArgumentNullException.ThrowIfNull(value, nameof(value));
-                if (_previous is not null)
-                {
-                    throw new InvalidOperationException("Previous already set");
-                }
-                _previous = value;
-            }
-        }
-        private IUnitOfWork? _previous = previous;
-        IWorkHandle? IWorkHandle.Previous => (IWorkHandle?)Previous;
-        IWorkHandle IWorkHandle.First
-        {
-            get
-            {
-                IWorkHandle first = this;
-                while (first.Previous is not null)
-                {
-                    first = first.Previous;
-                }
-                return first;
-            }
-        }
-        public IWorkCollection Next => _next;
-        private WorkCollection _next = new WorkCollection(workScheduler);
-        public CancellationToken CancellationToken { get; } = cancellationToken;
-        public ExecutionStack? LatestExecutionStack { get; private set; }
+        public IDependOnCondition? DependsOn { get; protected set; }
+        public string? Name { get; }
+        public Predicate<TResult>? SucceedsWhen { get; set; }
+        public Predicate<TResult>? FailsWhen { get; set; }
+        public Action<Exception>? OnFail { get; set; }
+        public int? RetryCount { get; set; }
+        public int MaxRetryDelay { get; set; }
+        public CancellationToken CancellationToken { get; }
+        protected IWorkScheduler WorkScheduler { get; }
 
-        protected IWorkScheduler WorkScheduler { get; } = workScheduler;
         private CancellationTokenSource? _cancelWaitToken;
 
-        private IWorkFactory _workFactory = workFactory;
-        public Task ExecuteAsync(ExecutionStack executionStack)
-        {
-            LatestExecutionStack = executionStack;
-            return DoExecuteAsync(executionStack);
-        }
-        protected abstract Task DoExecuteAsync(ExecutionStack executionStack);
+        private IWorkFactory _workFactory;
 
-        public virtual void SetException(Exception exception) { }
-        public abstract void NotifyStart();
-        public void Run() => NotifyStart();
-        public IObservable<TResult> RunAsObservable()
-        {
-            Run();
-            return this;
-        }
+        protected ISubject<IObservable<TParameter>> ParameterSubject { get; }
 
-        public IWorkHandle<T> Unwrap<T>()
+        //protected abstract IObservable<TResult> RunObservable { get; }
+
+        public WorkBase(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+            : base (cancellationToken)
         {
-            UnwrapProxy<TResult, T> proxy = new UnwrapProxy<TResult, T>(this, WorkScheduler, _workFactory, CancellationToken);
-            _next.Add(new ConditionalWork(proxy));
-            return proxy;
+            Name = name;
+            CancellationToken = cancellationToken;
+            WorkScheduler = workScheduler;
+            _workFactory = workFactory;
+            ParameterSubject = GetParameterSubject();
         }
 
+        public Task ExecuteAsync(ExecuteWorkItem executeWorkItem)
+        {
+            if (executeWorkItem is not ExecuteWorkItem<TParameter, TResult> genericExecuteWorkItem)
+            {
+                throw new ArgumentException($"WorkItem with generic type '{typeof(TParameter)}' expected, but received '{executeWorkItem.GetType().GenericTypeArguments.FirstOrDefault()}'");
+            }
+            return DoExecuteAsync(genericExecuteWorkItem);
+        }
+        protected abstract Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem);
+
+        //public void Run() => this.Subscribe();
         public void ConfigureDebounce(int hashCode, TimeSpan debounceTime)
         {
             HashCode = hashCode;
             DebounceTime = debounceTime;
         }
 
-        public abstract ISubject<T> CreateSubject<T>();
+        //public TaskAwaiter<TResult> GetAwaiter() => this.ToOnceTask(null, CancellationToken).GetAwaiter();
+        //public Task<TResult> AsTask() => this.ToOnceTask(null, CancellationToken);
+
+        //Task IWorkHandle.AsTask() => this.ToOnceTask(null, CancellationToken);
+        //TaskAwaiter IWorkHandle.GetAwaiter() => ((IWorkHandle)this).AsTask().GetAwaiter();
+
+        protected abstract ISubject<IObservable<TParameter>> GetParameterSubject();
 
         protected async Task SafeExecuteAsync<T>(IWorkDelegate work, Action<T> onSuccess, Action onCanceled, Action<Exception> onFail, Predicate<T>? succeedsWhen, Predicate<T>? failsWhen, params object?[]? args)
         {
@@ -123,12 +109,7 @@ namespace EP94.AsyncWorker.Internal.Models
             }
         }
 
-        protected void ScheduleNext(ExecutionStack executionStack)
-        {
-            Next.ScheduleNext(executionStack);
-        }
-
-        public async Task<bool> WaitForNextExecutionAsync(DateTime next, CancellationToken cancellationToken)
+        public async Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTime next, CancellationToken cancellationToken)
         {
             CancellationTokenSource cancelWaitToken = _cancelWaitToken = new CancellationTokenSource();
             using CancellationTokenSource linkedToken = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, cancellationToken, _cancelWaitToken.Token);
@@ -143,7 +124,7 @@ namespace EP94.AsyncWorker.Internal.Models
             }
             catch (TaskCanceledException)
             {
-                SetCanceled();
+                workItem.SetCanceled();
             }
             finally
             {
@@ -153,111 +134,75 @@ namespace EP94.AsyncWorker.Internal.Models
             return false;
         }
 
-        public void SetCanceled()
-        {
-            _cancelWaitToken?.Cancel();
-            DoSetCanceled();
-        }
-        protected abstract void DoSetCanceled();
-        public virtual void OnOptionsSet() { }
+        //public IDisposable Subscribe(IObserver<TResult> observer) => RunObservable.Subscribe(observer);
 
-        public IWorkHandle Then(Action task, ConfigureAction? configureAction = null, string? name = null)
-        {
-            return Then((_) =>
-            {
-                task();
-                return Task.CompletedTask;
-            }, configureAction, name);
-        }
-
-        public IWorkHandle<TNextResult> Then<TNextResult>(Func<TResult, TNextResult> task, ConfigureAction<TNextResult>? configureAction = null, Predicate<TResult>? condition = null, string? name = null)
-        {
-            return Then((result, _) =>
-            {
-                return Task.FromResult(task(result));
-            }, configureAction, condition, name);
-        }
-
-        public IWorkHandle Then(Action<TResult> task, ConfigureAction? configureAction = null, Predicate<TResult>? condition = null, string? name = null)
-        {
-            return Then((result, _) =>
-            {
-                task(result);
-                return Task.CompletedTask;
-            }, configureAction, condition, name);
-        }
-        public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, string? name = null) => Then(task, configureAction, null, name);
-        public IWorkHandle Then(ActionWorkDelegate task, ConfigureAction? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)
-        {
-            IWorkHandle unitOfWork = _workFactory.CreateWork(task, configureAction, name, CancellationToken);
-            ((IUnitOfWork)unitOfWork).Previous = this;
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)unitOfWork, predicate));
-            return unitOfWork;
-        }
-
-        public IWorkHandle Then(ActionWorkDelegate<TResult> task, ConfigureAction? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)
-        {
-            IWorkHandle unitOfWork = _workFactory.CreateWork(this, task, configureAction, name, CancellationToken);
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)unitOfWork, predicate));
-            return unitOfWork;
-        }
-
-        public IWorkHandle<TNextResult> Then<TNextResult>(FuncWorkDelegate<TResult, TNextResult> task, ConfigureAction<TNextResult>? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)
-        {
-            IWorkHandle<TNextResult> unitOfWork = _workFactory.CreateWork((IUnitOfWork<TResult>)this, task, configureAction, name, CancellationToken);
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)unitOfWork, predicate));
-            return unitOfWork;
-        }
-
-        public IWorkHandle<TNextResult> Then<TNextResult>(IWorkHandle<TNextResult> task)
-        {
-            IUnitOfWork first = (IUnitOfWork)task.First;
-            first.Previous = this;
-            _next.Add(new ConditionalWork((IUnitOfWork)task));
-            return task;
-        }
-
-        public IWorkHandle<TNextResult> Then<TNextResult>(IWorkHandle<TNextResult> task, Predicate<TResult>? condition = null)
-        {
-            IUnitOfWork first = (IUnitOfWork)task.First;
-            first.Previous = this;
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)task, condition));
-            return task;
-        }
-
-        public IWorkHandle Then(IWorkHandle task) => Then(task, null);
-        public IWorkHandle Then(IWorkHandle task, Predicate<TResult>? condition = null)
-        {
-            IUnitOfWork first = (IUnitOfWork)task.First;
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)task, condition));
-            return task;
-        }
-
-        public IWorkHandle<TNextResult> Then<TNextResult>(FuncWorkDelegate<TNextResult> task, ConfigureAction<TNextResult>? configureAction = null, Predicate<TResult>? predicate = null, string? name = null)
-        {
-            IWorkHandle<TNextResult> unitOfWork = _workFactory.CreateWork(task, configureAction, name, CancellationToken);
-            ((IUnitOfWork)unitOfWork).Previous = this;
-            _next.Add(new ConditionalWork<TResult>((IUnitOfWork)unitOfWork, predicate));
-            return unitOfWork;
-        }
-
-        public Task<TResult> AsTask() => this.ToOnceTask(NotifyStart, CancellationToken);
-        Task IWorkHandle.AsTask() => AsTask();
-        TaskAwaiter<TResult> IWorkHandle<TResult>.GetAwaiter() => AsTask().GetAwaiter();
-        TaskAwaiter IWorkHandle.GetAwaiter() => ((Task)AsTask()).GetAwaiter();
-
-        public abstract IDisposable Subscribe(IObserver<TResult> observer);
-
-        public void DependOn<T>(IWorkHandle<T> workHandle, Predicate<T> condition)
+        public void DependOn<T>(IObservable<T> workHandle, Predicate<T> condition)
         {
             DependsOn = new DependOnCondition<T>(workHandle, condition);
         }
 
-        //public IWorkHandle<TNextResult?> Then<TNextResult>(IWorkHandle<TNextResult?> task)
+        public void SetSourceObservable(IObservable<TParameter> observable)
+        {
+            ParameterSubject.OnNext(observable);
+        }
+
+        //public IResultWorkHandle<TResult, TNextResult> Then<TNextResult>(IResultWorkHandle<TResult, TNextResult> task, Predicate<TResult>? condition = null)
         //{
-        //    ((IUnitOfWork)task).Previous = this;
-        //    _next.Add((IUnitOfWork)task);
+        //    throw new NotImplementedException();
+        //}
+
+        //public IObservable<TResult> SetSourceObservable(IObservable<Unit> observable)
+        //{
+        //    throw new NotImplementedException();
+        //}
+
+        //TWorkHandle ILinkWork.Then<TWorkHandle>(TWorkHandle task)
+        //{
+        //    if (task is IActionWorkHandle<TResult> parameterWorkHandle)
+        //    {
+        //        parameterWorkHandle.SetSourceObservable(this);
+        //    }
+        //    else if (task is INoParameterWorkHandle noParameterWorkHandle)
+        //    {
+        //        noParameterWorkHandle.SetSourceObservable(this.Select(_ => Unit.Default));
+        //    }
         //    return task;
         //}
+
+        public IResultWorkHandle<TNextResult> Unwrap<TNextResult>(IResultWorkHandle<TNextResult> next)
+        {
+            return new UnwrapProxy<TResult, TNextResult>(this, next, WorkScheduler, _workFactory, CancellationToken.None);
+        }
+
+        //public TResult Unwrap<TInnerWorkHandle>() where TInnerWorkHandle : IWorkHandle, TResult
+        //{
+        //    return new UnwrapProxy2<TInnerWorkHandle, TResult>(this, WorkScheduler, _workFactory, Name, CancellationToken);
+        //}
+
+        //public TInnerWorkHandle Unwrap<TInnerWorkHandle>() where TInnerWorkHandle : IWorkHandle, TResult
+        //{
+        //    return new UnwrapProxy2<TInnerWorkHandle>((IResultWorkHandle<TInnerWorkHandle>)this, WorkScheduler, _workFactory, Name, CancellationToken);
+        //}
+
+        //public TResult Unwrap<T>() where T : IConnectableWorkHandle<>
+        //{
+
+        //}
+
+        //void IConnectableWorkHandle<Unit>.SetSourceObservable(IObservable<Unit> observable)
+        //{
+        //    SetSourceObservable(observable.Select(_ => default(TParameter)));
+        //}
+
+        //IWorkHandle<TResult, Unit> ILinkWork<TResult>.Then(ActionWorkDelegate<TResult> task, ConfigureAction? configureAction, Predicate<TResult>? predicate, string? name)
+        //{
+        //    IWorkHandle<TResult, Unit> unitOfWork = _workFactory.CreateWork(task, configureAction, name, CancellationToken);
+        //    unitOfWork.Connect(this.Where(x => predicate?.Invoke(x) ?? true));
+        //    return unitOfWork;
+        //}
     }
+
+    //internal abstract class WorkBase<TResult>(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : WorkBase<Unit, TResult>(workScheduler, workFactory, name, cancellationToken)
+    //{
+    //}
 }

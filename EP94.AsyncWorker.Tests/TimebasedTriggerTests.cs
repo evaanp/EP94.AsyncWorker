@@ -16,7 +16,7 @@ namespace EP94.AsyncWorker.Tests
             Random random = new Random();
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             List<int> results = new List<int>();
-            IWorkHandle<int> workHandle = workFactory.CreateTimebasedTrigger<int>((c) =>
+            IFuncWorkHandle<int> workHandle = workFactory.CreateTimebasedTrigger<int>((c) =>
             {
                 int result = random.Next();
                 results.Add(result);

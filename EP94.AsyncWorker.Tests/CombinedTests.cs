@@ -1,4 +1,6 @@
-﻿using EP94.AsyncWorker.Public.Interfaces;
+﻿using EP94.AsyncWorker.Internal.Utils;
+using EP94.AsyncWorker.Public.Interfaces;
+using EP94.AsyncWorker.Public.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,7 +18,7 @@ namespace EP94.AsyncWorker.Tests
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
             List<T> received = [];
-            IWorkHandle<T> workHandle = trigger.Then((value, c) =>
+            IFuncWorkHandle<T, T> workHandle = trigger.ThenDo((value, c) =>
             {
                 return Task.FromResult(value);
             });
@@ -34,7 +36,7 @@ namespace EP94.AsyncWorker.Tests
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
             List<T> received = [];
-            IWorkHandle<T> workHandle = trigger.Then((value, c) =>
+            IFuncWorkHandle<T, T> workHandle = trigger.ThenDo((value, c) =>
             {
                 return Task.FromResult(value);
             });
@@ -52,11 +54,11 @@ namespace EP94.AsyncWorker.Tests
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             ITrigger<int> trigger = workFactory.CreateTriggerAsync<int>();
-            IWorkHandle<int> workHandle = trigger;
+            IFuncWorkHandle<int, int> workHandle = trigger.ThenDo((i, c) => Task.FromResult(i));
             for (int i = 0; i < number; i++)
             {
                 workHandle = workHandle
-                    .Then((n, c) =>
+                    .ThenDo((n, c) =>
                     {
                         return Task.FromResult(++n);
                     });
@@ -67,22 +69,33 @@ namespace EP94.AsyncWorker.Tests
         }
 
         [Fact]
-        public async Task UpwrapTest()
+        public async Task TestUnrelatedMultipleLinkedAsync()
         {
-            int value = 5;
-            IWorkFactory workFactory = CreateDefaultWorkFactory();
-            int result = await workFactory.CreateWork(c =>
-            {
-                ITrigger<int> trigger = workFactory.CreateTriggerAsync<int>();
-                IWorkHandle<int> resultWorkHandle = trigger.Then((value, c) =>
-                {
-                    return Task.FromResult(value);
-                });
-                trigger.OnNext(value);
-                return Task.FromResult(resultWorkHandle);
-            })
-            .Unwrap<int>();
-            Assert.Equal(value, result);
+            List<object> result = new List<object>();
+            //IActionWorkHandle first = new Task(() =>
+            //{
+            //    result.Add(1);
+            //}).AsWorkHandle();
+
         }
+
+        //[Fact]
+        //public async Task UpwrapTest()
+        //{
+        //    int value = 5;
+        //    IWorkFactory workFactory = CreateDefaultWorkFactory();
+        //    int result = await workFactory.CreateWork(c =>
+        //    {
+        //        ITrigger<int> trigger = workFactory.CreateTriggerAsync<int>();
+        //        IWorkHandle<int> resultWorkHandle = trigger.Then((value, c) =>
+        //        {
+        //            return Task.FromResult(value);
+        //        });
+        //        trigger.OnNext(value);
+        //        return Task.FromResult(resultWorkHandle);
+        //    })
+        //    .Unwrap<int>();
+        //    Assert.Equal(value, result);
+        //}
     }
 }

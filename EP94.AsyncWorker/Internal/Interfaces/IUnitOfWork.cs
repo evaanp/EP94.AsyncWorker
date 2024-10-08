@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive;
 using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -13,23 +14,18 @@ namespace EP94.AsyncWorker.Internal.Interfaces
 {
     public interface IUnitOfWork
     {
+        internal CancellationToken CancellationToken { get; }
         internal TimeSpan? DebounceTime { get; }
         internal int? HashCode { get; }
         internal IDependOnCondition? DependsOn { get; }
         internal string? Name { get; }
-        internal bool HasNext { get; }
-        internal IWorkCollection Next { get; }
-        internal IUnitOfWork? Previous { get; set;}
-        internal ExecutionStack? LatestExecutionStack { get; }
-        internal Task ExecuteAsync(ExecutionStack executionStack);
-        internal void SetException(Exception exception);
-        internal void SetCanceled();
-        internal Task<bool> WaitForNextExecutionAsync(DateTime next, CancellationToken cancellationToken);
-        internal void NotifyStart();
-        internal ISubject<T> CreateSubject<T>();
+        internal Task ExecuteAsync(ExecuteWorkItem executeWorkItem);
+        internal Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTime next, CancellationToken cancellationToken);
     }
-    public interface IUnitOfWork<TResult> : IUnitOfWork, IWorkHandle<TResult> 
-    { 
+    //public interface IUnitOfWork<TResult> : IUnitOfWork, IWorkHandle<TResult> 
+    //{ 
 
-    }
+    //}
+
+    //public interface IUnitOfWork<TParam, TResult> : IUnitOfWork<TResult>, IWorkHandle<TParam, TResult> { }
 }

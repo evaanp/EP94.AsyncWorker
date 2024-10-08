@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Reactive.Threading.Tasks;
@@ -16,116 +17,80 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    internal class UnitOfWork<TParameter, TResult>(IWorkDelegate work, IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : WorkBase<TResult>(previous, workScheduler, workFactory, name, cancellationToken), IUnitOfWork<TResult>, IWorkOptions<TResult>
+    internal class UnitOfWork<TParameter, TResult> : WorkBase<TParameter, TResult>, IUnitOfWork, IWorkOptions<TResult>
     {
+        public IWorkDelegate Work { get; }
 
-        public IWorkDelegate Work { get; } = work;
+        protected override IObservable<TResult> RunObservable { get; }
 
-        public Predicate<TResult>? SucceedsWhen { get; set; }
-        public Predicate<TResult>? FailsWhen { get; set; }
-        public Action<Exception>? OnFail { get; set; }
-        public int? RetryCount { get; set; }
-        public int MaxRetryDelay { get; set; }
-
-        private bool _hasNeverRan = true;
-        private ISubject<TResult> _subject;
-
-        protected override async Task DoExecuteAsync(ExecutionStack executionStack)
+        public UnitOfWork(IWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : base(workScheduler, workFactory, name, cancellationToken)
         {
-            ExecutionContext<TResult?> executionContext;
-            if (!executionStack.TryPeek(out IExecutionContext? previousContext) || !ReferenceEquals(previousContext.Owner, this))
-            {
-                executionContext = new ExecutionContext<TResult?>(this);
-                executionStack.Push(executionContext);
-            }
-            else
-            {
-                executionContext = (ExecutionContext<TResult?>)previousContext;
-            }
-            executionContext.ExecutionCounter++;
-
-            await SafeExecuteAsync(Work,
-                onSuccess: result =>
+            Work = work;
+            RunObservable = ParameterSubject
+                .Switch()
+                .Select(x =>
                 {
-                    executionStack.LastResult = result;
-                    executionContext.TaskCompletionSource.TrySetResult(result);
-                    _subject.OnNext(result);
-                    if (HasNext)
-                    {
-                        ScheduleNext(executionStack);
-                    }
+                    //return Observable.FromAsync(() =>
+                    //{
+                        ExecuteWorkItem<TParameter, TResult> executeWorkItem = new ExecuteWorkItem<TParameter, TResult>(this, x);
+                        workScheduler.ScheduleWork(executeWorkItem, null);
+                    return executeWorkItem.ToOnceTask();
+                    //});
+                })
+                .Switch();
+        }
+
+        protected override async Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem)
+        {
+            executeWorkItem.ExecutionCounter++;
+            await SafeExecuteAsync(Work,
+                onSuccess: (result) => {
+                    executeWorkItem.ResultSubject.OnNext(result);
+                    executeWorkItem.ResultSubject.OnCompleted();
                 },
-                onCanceled: () => {
-                    DoSetCanceled();
+                onCanceled: () =>
+                {
+                    executeWorkItem.ResultSubject.OnCompleted();
                 },
                 onFail: e =>
                 {
                     OnFail?.Invoke(e);
-                    if (executionContext.ExecutionCounter <= RetryCount)
+                    if (executeWorkItem.ExecutionCounter <= RetryCount)
                     {
-                        double seconds = Math.Min(Math.Pow(2, executionContext.ExecutionCounter), 30);
-                        WorkScheduler.ScheduleWork(this, DateTime.UtcNow.AddSeconds(seconds), executionStack);
+                        double seconds = Math.Min(Math.Pow(2, executeWorkItem.ExecutionCounter), 30);
+                        WorkScheduler.ScheduleWork(executeWorkItem, DateTime.UtcNow.AddSeconds(seconds));
                     }
                     else
                     {
-                        SetException(e);
+                        executeWorkItem.ResultSubject.OnError(e);
                     }
-                }, 
-                succeedsWhen: SucceedsWhen, 
-                failsWhen: FailsWhen, 
-                executionStack.LastResult);
+                },
+                succeedsWhen: SucceedsWhen,
+                failsWhen: FailsWhen,
+                executeWorkItem.Parameter);
         }
 
-        protected override void DoSetCanceled()
+        protected override ISubject<IObservable<TParameter>> GetParameterSubject()
         {
-            Next.SetCanceled();
-            _subject.OnCompleted();
-        }
-
-        public override void SetException(Exception exception)
-        {
-            Next.SetException(exception);
-            _subject.OnError(exception);
-        }
-
-        public override IDisposable Subscribe(IObserver<TResult> observer)
-        {
-            NotifyStart();
-            return _subject.Subscribe(observer);
-        }
-
-        public override void NotifyStart()
-        {
-            lock (this)
-            {
-                if (Previous is not null)
-                {
-                    Previous.NotifyStart();
-                }
-                else if (_hasNeverRan)
-                {
-                    _hasNeverRan = false;
-                    ExecutionStack executionStack = new ExecutionStack();
-                    WorkScheduler.ScheduleWork(this, null, executionStack);
-                }
-            }
-        }
-
-        public override ISubject<T> CreateSubject<T>()
-        {
-            return RetainResult switch
-            {
-                Public.Models.RetainResult.Inherit => Previous?.CreateSubject<T>() ?? new Subject<T>(),
-                Public.Models.RetainResult.RetainLast => new ReplaySubject<T>(1),
-                _ => new Subject<T>(),
-            };
-        }
-
-        public override void OnOptionsSet()
-        {
-            _subject = CreateSubject<TResult>();
+            return new BehaviorSubject<IObservable<TParameter>>(Observable.Return(default(TParameter)));
+            //return new ReplaySubject<IObservable<TParameter>>(1);
         }
     }
-    internal class UnitOfWork<TResult>(IWorkDelegate work, IUnitOfWork? previous, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) 
-        : UnitOfWork<Empty, TResult>(work, previous, workScheduler, workFactory, name, cancellationToken);
+    internal class FuncUnitOfWork<TResult>(IFuncWorkDelegate<TResult> work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+        : UnitOfWork<Unit, TResult>(work, workScheduler, workFactory, name, cancellationToken), IFuncWorkHandle<TResult>
+    { }
+
+    internal class FuncUnitOfWork<TParam, TResult>(IFuncWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+        : UnitOfWork<TParam, TResult>(work, workScheduler, workFactory, name, cancellationToken), IFuncWorkHandle<TParam, TResult>
+    { }
+    internal class ActionUnitOfWork<TParam>(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+        : UnitOfWork<TParam, Unit>(work, workScheduler, workFactory, name, cancellationToken), IActionWorkHandle<TParam>
+    { }
+
+    internal class ActionUnitOfWork(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+        : UnitOfWork<Unit, Unit>(work, workScheduler, workFactory, name, cancellationToken), IActionWorkHandle 
+    {
+
+    }
+
 }

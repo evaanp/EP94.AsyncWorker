@@ -19,9 +19,9 @@ namespace EP94.AsyncWorker.Internal.Models
             return await _executeWorkChannel.Reader.ReadAsync(cancellationToken);
         }
 
-        public void ScheduleWork(IUnitOfWork unitOfWork, ExecutionStack executionStack)
+        public void ScheduleWork(ExecuteWorkItem executeWorkItem)
         {
-            _executeWorkChannel.Writer.TryWrite(new ExecuteWorkItem(unitOfWork, executionStack));
+            _executeWorkChannel.Writer.TryWrite(executeWorkItem);
         }
     }
 }

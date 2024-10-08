@@ -9,10 +9,10 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    public class DependOnCondition<T>(IWorkHandle<T> dependsOn, Predicate<T> condition) : IDependOnCondition
+    public class DependOnCondition<TResult>(IObservable<TResult> dependsOn, Predicate<TResult> condition) : IDependOnCondition
     {
-        private IWorkHandle<T> _dependsOn = dependsOn;
-        private Predicate<T> _condition = condition;
+        private IObservable<TResult> _dependsOn = dependsOn;
+        private Predicate<TResult> _condition = condition;
         public Task WaitForConditionAsync(CancellationToken cancellationToken)
         {
             if (_dependsOn is null)

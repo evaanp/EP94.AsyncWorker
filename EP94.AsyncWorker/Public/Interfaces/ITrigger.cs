@@ -7,11 +7,7 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Public.Interfaces
 {
-    public interface ITrigger : IWorkHandle, ILinkWork, IUnitOfWork
-    {
-        
-    }
-    public interface ITrigger<T> : ITrigger, IWorkHandle<T>
+    public interface ITrigger<T> : IFuncWorkHandle<T>
     {
         void OnNext(T param);
     }

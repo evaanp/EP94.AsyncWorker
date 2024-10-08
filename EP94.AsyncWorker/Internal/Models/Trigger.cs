@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reactive;
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Reactive.Threading.Tasks;
 using System.Runtime.CompilerServices;
@@ -13,14 +15,16 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    internal class Trigger<T> : WorkBase<T>, ITrigger<T>, ILinkWork, IWorkHandle
+    internal class Trigger<T> : WorkBase<Unit, T>, ITrigger<T>
     {
+        protected override IObservable<T> RunObservable => _subject;
+
         private ReplaySubject<T> _subject = new ReplaySubject<T>(1);
         private bool _triggerOnlyOnChanges;
         private T? _lastValue;
         private IEqualityComparer<T> _comparer;
 
-        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : base(null, workScheduler, workFactory, name, cancellationToken)
+        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : base(workScheduler, workFactory, name, cancellationToken)
         {
             _triggerOnlyOnChanges = triggerOnlyOnChanges;
             _subject.Subscribe(x => _lastValue = x);
@@ -39,44 +43,28 @@ namespace EP94.AsyncWorker.Internal.Models
         {
             if (!_triggerOnlyOnChanges || !_comparer.Equals(param, _lastValue))
             {
-                ExecutionStack executionStack = new ExecutionStack();
-                ExecutionContext<T> executionContext = new ExecutionContext<T>(this);
-                executionContext.TaskCompletionSource.SetResult(param);
-                executionStack.LastResult = param;
-                executionStack.Push(executionContext);
-                WorkScheduler.ScheduleWork(this, null, executionStack);
+                _lastValue = param;
+                _subject.OnNext(param);
+                //ParameterSubject.OnNext(Observable.Return(Unit.Default));
+                //WorkScheduler.ScheduleWork(new ExecuteWorkItem<Unit, T>(this, Unit.Default), null);
             }
         }
 
-        protected override Task DoExecuteAsync(ExecutionStack executionStack)
+        protected override Task DoExecuteAsync(ExecuteWorkItem<Unit, T> executeWorkItem)
         {
-            if (!_triggerOnlyOnChanges || !Equals((T)executionStack.LastResult!, _lastValue))
-            {
-                ScheduleNext(executionStack);
-                _subject.OnNext((T)executionStack.LastResult!);
-            }
+            //if (!_triggerOnlyOnChanges || !_comparer.Equals(executeWorkItem.Parameter, _lastValue))
+            //{
+            //    _subject.OnNext(executeWorkItem.Parameter);
+            //}
+            executeWorkItem.ResultSubject.OnNext(_lastValue);
             return Task.CompletedTask;
         }
 
-        public void OnNext(object? param)
+        //public override IDisposable Subscribe(IObserver<T> observer) => _subject.Subscribe(observer);
+
+        protected override ISubject<IObservable<Unit>> GetParameterSubject()
         {
-            if (param is T p)
-            {
-                OnNext(p);
-            }
-            throw new InvalidOperationException($"Parameter of type '{typeof(T).Name}' expected but received '{param?.GetType().Name}'");
+            return new Subject<IObservable<Unit>>();
         }
-
-        public override IDisposable Subscribe(IObserver<T> observer) => _subject.Subscribe(observer);
-
-        protected override void DoSetCanceled() => _subject.OnCompleted();
-        public override void SetException(Exception exception) => _subject.OnError(exception);
-
-        public override void NotifyStart()
-        {
-           
-        }
-
-        public override ISubject<T1> CreateSubject<T1>() => new ReplaySubject<T1>(1);
     }
 }

@@ -24,7 +24,7 @@ namespace EP94.AsyncWorker.Internal.Models
         {
             lock (this)
             {
-                WorkItem.UnitOfWork.SetCanceled();
+                WorkItem.SetCanceled();
                 _workItem = workItem;
             }
         }

@@ -1,7 +1,10 @@
+using EP94.AsyncWorker.Internal.Utils;
 using EP94.AsyncWorker.Public.Exceptions;
 using EP94.AsyncWorker.Public.Interfaces;
+using EP94.AsyncWorker.Public.Models;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using System.Diagnostics;
+using System.Reactive.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Tests
 {
@@ -24,7 +27,7 @@ namespace EP94.AsyncWorker.Tests
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             int retried = 0;
-            IWorkHandle workHandle = workFactory.CreateWork((c) =>
+            IActionWorkHandle workHandle = workFactory.CreateWork((c) =>
             {
                 if (retried == 2)
                 {
@@ -32,7 +35,8 @@ namespace EP94.AsyncWorker.Tests
                 }
                 retried++;
                 throw new InvalidOperationException();
-            }, options => options.RetryCount = 2);
+            })
+                .ConfigureRetry(2);
             await workHandle;
             Assert.Equal(2, retried);
         }
@@ -43,13 +47,11 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestFailsWhenOption(bool value)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            IWorkHandle<bool> workHandle = workFactory.CreateWork(c =>
+            IFuncWorkHandle<bool> workHandle = workFactory.CreateWork(c =>
             {
                 return Task.FromResult(value);
-            }, options =>
-            {
-                options.FailsWhen = value => !value;
-            });
+            })
+                .ConfigureFailsWhen((bool value) => !value);
             if (value)
             {
                 Assert.Equal(value, await workHandle);
@@ -69,13 +71,11 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestSucceedsWhenOption(bool value)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            IWorkHandle<bool> workHandle = workFactory.CreateWork(c =>
+            IFuncWorkHandle<bool> workHandle = workFactory.CreateWork(c =>
             {
                 return Task.FromResult(value);
-            }, options =>
-            {
-                options.SucceedsWhen = value => value;
-            });
+            })
+                .ConfigureSucceedsWhen((bool value) => value);
             if (value)
             {
                 Assert.Equal(value, await workHandle);
@@ -95,66 +95,59 @@ namespace EP94.AsyncWorker.Tests
             IWorkFactory workFactory = CreateDefaultWorkFactory();
             List<int> results = new List<int>();
             int[] expectedValues = Enumerable.Range(0, 100).ToArray();
-            List<IWorkHandle> workHandles = [];
+            List<IActionWorkHandle> workHandles = [];
             for (int i = 0; i < expectedValues.Length; i++)
             {
                 int index = i;
-                IWorkHandle workHandle = workFactory.CreateWork((c) =>
+                IActionWorkHandle workHandle = workFactory.CreateWork((c) =>
                 {
                     results.Add(expectedValues[index]);
                     return Task.CompletedTask;
-                }, options => options.RetainResult = Public.Models.RetainResult.RetainLast, $"Item_{index}", new CancellationTokenSource(2000).Token);
+                }, $"Item_{index}", new CancellationTokenSource(2000).Token)
+                    .ConfigureRetainResult(RetainResult.RetainLast);
                 workHandles.Add(workHandle);
             }
-            foreach (IWorkHandle workHandle in workHandles)
+            List<Task> tasks = new List<Task>();
+            foreach (IActionWorkHandle workHandle in workHandles)
             {
-                workHandle
-                    .Run();
+                tasks.Add(workHandle.AsTask());
             }
             await Task.Delay(500);
-            try
-            {
-
-            await Task.WhenAll(workHandles.Select(x => x.AsTask()));
-            }
-            catch (Exception e)
-            {
-                int counter = EP94.AsyncWorker.Internal.Utils.ObservableExtensions.Counter;
-            }
+            await Task.WhenAll(tasks);
             Assert.Equal(expectedValues, results);
         }
 
         [Fact]
         public async Task TestSameHashCode()
         {
-            IWorkFactory workFactory = CreateDefaultWorkFactory();
+            IWorkFactory workFactory = CreateDefaultWorkFactory(10);
             List<int> results = new List<int>();
             int[] values = Enumerable.Range(0, 100).ToArray();
-            List<IWorkHandle> workHandles = [];
+            List<IActionWorkHandle> workHandles = [];
             for (int i = 0; i < values.Length; i++)
             {
                 int index = i;
-                IWorkHandle workHandle = workFactory.CreateWork((c) =>
+                IActionWorkHandle workHandle = workFactory.CreateWork((c) =>
                 {
                     results.Add(values[index]);
                     return Task.CompletedTask;
-                }, options => options.ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(50)));
+                }).ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(100));
                 workHandles.Add(workHandle);
             }
-            foreach (IWorkHandle workHandle in workHandles)
+            List<Task> tasks = new List<Task>();
+            foreach (IActionWorkHandle workHandle in workHandles)
             {
-                workHandle
-                    .Run();
+                tasks.Add(workHandle.AsTask());
             }
-            foreach (IWorkHandle workHandle in workHandles)
+            foreach (Task task in tasks)
             {
-                if (workHandle != workHandles.Last())
+                if (task != tasks.Last())
                 {
-                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await workHandle);
+                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
                 }
                 else
                 {
-                    await workHandle;
+                    await task;
                 }
             }
             //await Task.WhenAll(workHandles.Select(x => x.AsTask()));
@@ -164,7 +157,7 @@ namespace EP94.AsyncWorker.Tests
         [Fact]
         public async Task TestSameHashCodeDependOnTrigger()
         {
-            IWorkFactory workFactory = CreateDefaultWorkFactory();
+            IWorkFactory workFactory = CreateDefaultWorkFactory(10);
             List<int> results = new List<int>();
             int[] values = Enumerable.Range(0, 100).ToArray();
             List<IWorkHandle> workHandles = [];
@@ -172,33 +165,32 @@ namespace EP94.AsyncWorker.Tests
             for (int i = 0; i < values.Length; i++)
             {
                 int index = i;
-                IWorkHandle workHandle = workFactory.CreateWork((c) =>
+                IActionWorkHandle workHandle = workFactory.CreateWork((c) =>
                 {
                     results.Add(values[index]);
                     return Task.CompletedTask;
-                }, options => 
-                {
-                    options.ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(50));
-                    options.DependOn(trigger, value => value);
-                }, name: index.ToString());
+                }, name: index.ToString())
+                    .ConfigureDependOn(trigger, value => value)
+                    .ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(100));
+
                 workHandles.Add(workHandle);
             }
-            foreach (IWorkHandle workHandle in workHandles)
+            List<Task> tasks = new List<Task>();
+            foreach (IActionWorkHandle workHandle in workHandles)
             {
-                workHandle
-                    .Run();
+                tasks.Add(workHandle.AsTask());
             }
             await Task.Delay(2000);
             trigger.OnNext(true);
-            foreach (IWorkHandle workHandle in workHandles)
+            foreach (Task task in tasks)
             {
-                if (workHandle != workHandles.Last())
+                if (task != tasks.Last())
                 {
-                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await workHandle);
+                    await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
                 }
                 else
                 {
-                    await workHandle;
+                    await task;
                 }
             }
             //await Task.WhenAll(workHandles.Select(x => x.AsTask()));
