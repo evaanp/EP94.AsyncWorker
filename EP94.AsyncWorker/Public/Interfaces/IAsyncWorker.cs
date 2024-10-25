@@ -9,7 +9,7 @@ namespace EP94.AsyncWorker.Public.Interfaces
 {
     public interface IAsyncWorker
     {
-        ITrigger<TParam> CreateTriggerAsync<TParam>();
+        ITrigger<TParam> CreateTrigger<TParam>();
         IObservable<T> ScheduleBackgroundWorkAsync<T>(IFuncWorkDelegate<T> task, TimeSpan interval, Func<bool> predicate, CancellationToken cancellationToken = default);
         IFuncWorkHandle<TResult?> ScheduleWorkAsync<TResult>(IFuncWorkDelegate<TResult> task, Action<IWorkOptions<TResult?>>? configureAction = null, CancellationToken cancellationToken = default, [System.Runtime.CompilerServices.CallerMemberName] string memberName = "",
         [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "",

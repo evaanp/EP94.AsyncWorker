@@ -34,8 +34,6 @@ namespace EP94.AsyncWorker.Internal.Models
         public CancellationToken CancellationToken { get; }
         protected IWorkScheduler WorkScheduler { get; }
 
-        private CancellationTokenSource? _cancelWaitToken;
-
         private IWorkFactory _workFactory;
 
         protected ISubject<IObservable<TParameter>> ParameterSubject { get; }
@@ -52,15 +50,15 @@ namespace EP94.AsyncWorker.Internal.Models
             ParameterSubject = GetParameterSubject();
         }
 
-        public Task ExecuteAsync(ExecuteWorkItem executeWorkItem)
+        public Task ExecuteAsync(ExecuteWorkItem executeWorkItem, CancellationToken cancellationToken)
         {
             if (executeWorkItem is not ExecuteWorkItem<TParameter, TResult> genericExecuteWorkItem)
             {
                 throw new ArgumentException($"WorkItem with generic type '{typeof(TParameter)}' expected, but received '{executeWorkItem.GetType().GenericTypeArguments.FirstOrDefault()}'");
             }
-            return DoExecuteAsync(genericExecuteWorkItem);
+            return DoExecuteAsync(genericExecuteWorkItem, cancellationToken);
         }
-        protected abstract Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem);
+        protected abstract Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem, CancellationToken cancellationToken);
 
         //public void Run() => this.Subscribe();
         public void ConfigureDebounce(int hashCode, TimeSpan debounceTime)
@@ -77,11 +75,11 @@ namespace EP94.AsyncWorker.Internal.Models
 
         protected abstract ISubject<IObservable<TParameter>> GetParameterSubject();
 
-        protected async Task SafeExecuteAsync<T>(IWorkDelegate work, Action<T> onSuccess, Action onCanceled, Action<Exception> onFail, Predicate<T>? succeedsWhen, Predicate<T>? failsWhen, params object?[]? args)
+        protected async Task SafeExecuteAsync<T>(IWorkDelegate work, Action<T> onSuccess, Action onCanceled, Action<Exception> onFail, Predicate<T>? succeedsWhen, Predicate<T>? failsWhen, CancellationToken cancellationToken, params object?[]? args)
         {
             try
             {
-                T returnValue = await work.InvokeAsync<T>(() => default, CancellationToken, args).WaitAsync(CancellationToken);
+                T returnValue = await work.InvokeAsync<T>(() => default, cancellationToken, args).WaitAsync(cancellationToken);
                 if (succeedsWhen is not null && !succeedsWhen(returnValue))
                 {
                     onFail(new WorkFailedException("Result of work didn't pass succeedsWhen predicate", returnValue, succeedsWhen.ToString()));
@@ -94,6 +92,10 @@ namespace EP94.AsyncWorker.Internal.Models
                 {
                     onSuccess(returnValue);
                 }
+            }
+            catch (TimeoutException)
+            {
+                onCanceled();
             }
             catch (TaskCanceledException)
             {
@@ -109,13 +111,13 @@ namespace EP94.AsyncWorker.Internal.Models
             }
         }
 
-        public async Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTime next, CancellationToken cancellationToken)
+        public async Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTimeOffset next, CancellationToken cancellationToken)
         {
-            CancellationTokenSource cancelWaitToken = _cancelWaitToken = new CancellationTokenSource();
-            using CancellationTokenSource linkedToken = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, cancellationToken, _cancelWaitToken.Token);
+            CancellationTokenSource cancelWaitToken = new CancellationTokenSource();
+            CancellationTokenSource linkedToken = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken, cancellationToken);
             try
             {
-                TimeSpan timeDiff = next - DateTime.UtcNow;
+                TimeSpan timeDiff = next - DateTimeOffset.UtcNow;
                 if (timeDiff > TimeSpan.Zero)
                 {
                     await Task.Delay(timeDiff, linkedToken.Token);
@@ -128,8 +130,8 @@ namespace EP94.AsyncWorker.Internal.Models
             }
             finally
             {
-                _cancelWaitToken = null;
                 cancelWaitToken.Dispose();
+                linkedToken.Dispose();
             }
             return false;
         }

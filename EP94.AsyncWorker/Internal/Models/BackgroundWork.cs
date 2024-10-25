@@ -34,7 +34,7 @@ namespace EP94.AsyncWorker.Internal.Models
             workScheduler.ScheduleWork(new ExecuteWorkItem<Unit, T>(this, Unit.Default), null);
         }
 
-        protected override async Task DoExecuteAsync(ExecuteWorkItem<Unit, T> executeWorkItem)
+        protected override async Task DoExecuteAsync(ExecuteWorkItem<Unit, T> executeWorkItem, CancellationToken cancellationToken)
         {
             if (_predicate?.Invoke() ?? true)
             {
@@ -51,9 +51,9 @@ namespace EP94.AsyncWorker.Internal.Models
                     onFail: (e) => {
                         _subject.OnError(e);
                         executeWorkItem.ResultSubject.OnError(e);
-                    }, null, null);
+                    }, null, null, cancellationToken);
             }
-            WorkScheduler.ScheduleWork(executeWorkItem, DateTime.UtcNow.Add(_interval));
+            WorkScheduler.ScheduleWork(executeWorkItem, DateTimeOffset.UtcNow.Add(_interval));
         }
 
         protected override ISubject<IObservable<Unit>> GetParameterSubject()

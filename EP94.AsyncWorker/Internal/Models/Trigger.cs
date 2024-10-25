@@ -17,7 +17,7 @@ namespace EP94.AsyncWorker.Internal.Models
 {
     internal class Trigger<T> : WorkBase<Unit, T>, ITrigger<T>
     {
-        protected override IObservable<T> RunObservable => _subject;
+        protected override IObservable<T> RunObservable => _subject.Retry();
 
         private ReplaySubject<T> _subject = new ReplaySubject<T>(1);
         private bool _triggerOnlyOnChanges;
@@ -50,7 +50,7 @@ namespace EP94.AsyncWorker.Internal.Models
             }
         }
 
-        protected override Task DoExecuteAsync(ExecuteWorkItem<Unit, T> executeWorkItem)
+        protected override Task DoExecuteAsync(ExecuteWorkItem<Unit, T> executeWorkItem, CancellationToken cancellationToken)
         {
             //if (!_triggerOnlyOnChanges || !_comparer.Equals(executeWorkItem.Parameter, _lastValue))
             //{
@@ -64,7 +64,7 @@ namespace EP94.AsyncWorker.Internal.Models
 
         protected override ISubject<IObservable<Unit>> GetParameterSubject()
         {
-            return new Subject<IObservable<Unit>>();
+            return new ReplaySubject<IObservable<Unit>>(1);
         }
     }
 }

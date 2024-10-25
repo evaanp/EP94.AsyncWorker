@@ -9,7 +9,7 @@ namespace EP94.AsyncWorker.Tests
 {
     public class TestsBase
     {
-        public static IWorkFactory CreateDefaultWorkFactory(int numberOfWorkers = 1, TimeSpan? defaultTimeout = null) => IWorkFactory.Create(numberOfWorkers, defaultTimeout ?? TimeSpan.FromSeconds(10));
+        public static IWorkFactory CreateDefaultWorkFactory(int numberOfWorkers = int.MaxValue, TimeSpan? defaultTimeout = null) => IWorkFactory.Create(numberOfWorkers, defaultTimeout ?? TimeSpan.FromSeconds(10));
         public static IEnumerable<object[]> TestData()
         {
             yield return [true];

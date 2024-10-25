@@ -14,7 +14,7 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestTrigger_SubscribeBeforeValue<T>(T returnValue)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
+            ITrigger<T> trigger = workFactory.CreateTrigger<T>();
             List<T> received = [];
             IDisposable subscription = trigger.Subscribe(received.Add);
             trigger.OnNext(returnValue);
@@ -28,7 +28,7 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestTrigger_SubscribeAfterValue<T>(T returnValue)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
+            ITrigger<T> trigger = workFactory.CreateTrigger<T>();
             List<T> received = [];
             trigger.OnNext(returnValue);
             IDisposable subscription = trigger.Subscribe(received.Add);

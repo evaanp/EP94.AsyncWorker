@@ -12,20 +12,20 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    internal class UnwrapProxy2<TInnerResult> : ObservableWorkBase<TInnerResult>, IResultWorkHandle<TInnerResult>
+    internal class UnwrapProxy2<TInnerResult> : ObservableWorkBase<TInnerResult>, IObservable<TInnerResult>
     {
         protected override IObservable<TInnerResult> RunObservable { get; }
         private ISubject<IResultWorkHandle<IObservable<TInnerResult>>> _parameterSubject;
 
-        public UnwrapProxy2(IResultWorkHandle<IObservable<TInnerResult>> workHandle, CancellationToken cancellationToken)
+        public UnwrapProxy2(IObservable<IObservable<TInnerResult>> workHandle, CancellationToken cancellationToken)
             : base (cancellationToken)
         {
-            _parameterSubject = new ReplaySubject<IResultWorkHandle<IObservable<TInnerResult>>>(1);
-            RunObservable = _parameterSubject
-                .Select(x => x.Switch())
+            //_parameterSubject = new BehaviorSubject<IResultWorkHandle<IObservable<TInnerResult>>>(workHandle);
+            RunObservable = workHandle
+                //.Select(x => x.Switch())
                 .Switch();
 
-            _parameterSubject.OnNext(workHandle);
+            //_parameterSubject.OnNext(workHandle);
         }
     }
 }

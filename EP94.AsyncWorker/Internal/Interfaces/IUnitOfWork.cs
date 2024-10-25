@@ -19,8 +19,8 @@ namespace EP94.AsyncWorker.Internal.Interfaces
         internal int? HashCode { get; }
         internal IDependOnCondition? DependsOn { get; }
         internal string? Name { get; }
-        internal Task ExecuteAsync(ExecuteWorkItem executeWorkItem);
-        internal Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTime next, CancellationToken cancellationToken);
+        internal Task ExecuteAsync(ExecuteWorkItem executeWorkItem, CancellationToken cancellationToken);
+        internal Task<bool> WaitForNextExecutionAsync(ExecuteWorkItem workItem, DateTimeOffset next, CancellationToken cancellationToken);
     }
     //public interface IUnitOfWork<TResult> : IUnitOfWork, IWorkHandle<TResult> 
     //{ 

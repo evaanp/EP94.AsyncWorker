@@ -21,7 +21,7 @@ namespace EP94.AsyncWorker.Tests
                 int result = random.Next();
                 results.Add(result);
                 return Task.FromResult(result);
-            }, DateTime.UtcNow, () => DateTime.UtcNow.AddSeconds(5));
+            }, workFactory.CreateWork(() => DateTimeOffset.UtcNow), workFactory.CreateWork(() => DateTimeOffset.UtcNow.AddSeconds(5)));
 
             await Task.Delay(6000);
             Assert.Equal(2, results.Count);

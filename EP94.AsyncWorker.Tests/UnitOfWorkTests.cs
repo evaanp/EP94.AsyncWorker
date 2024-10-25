@@ -92,10 +92,11 @@ namespace EP94.AsyncWorker.Tests
         [Fact]
         public async Task TestRateLimitingOrder()
         {
-            IWorkFactory workFactory = CreateDefaultWorkFactory();
+            IWorkFactory workFactory = CreateDefaultWorkFactory(1);
             List<int> results = new List<int>();
             int[] expectedValues = Enumerable.Range(0, 100).ToArray();
             List<IActionWorkHandle> workHandles = [];
+            var cancelToken = new CancellationTokenSource(2000);
             for (int i = 0; i < expectedValues.Length; i++)
             {
                 int index = i;
@@ -103,7 +104,7 @@ namespace EP94.AsyncWorker.Tests
                 {
                     results.Add(expectedValues[index]);
                     return Task.CompletedTask;
-                }, $"Item_{index}", new CancellationTokenSource(2000).Token)
+                }, $"Item_{index}", cancelToken.Token)
                     .ConfigureRetainResult(RetainResult.RetainLast);
                 workHandles.Add(workHandle);
             }
@@ -161,7 +162,7 @@ namespace EP94.AsyncWorker.Tests
             List<int> results = new List<int>();
             int[] values = Enumerable.Range(0, 100).ToArray();
             List<IWorkHandle> workHandles = [];
-            ITrigger<bool> trigger = workFactory.CreateTriggerAsync(false, false);
+            ITrigger<bool> trigger = workFactory.CreateTrigger(false, false);
             for (int i = 0; i < values.Length; i++)
             {
                 int index = i;
@@ -203,7 +204,8 @@ namespace EP94.AsyncWorker.Tests
             IWorkFactory workFactory = CreateDefaultWorkFactory(defaultTimeout: TimeSpan.FromSeconds(1));
             await Assert.ThrowsAsync<TaskCanceledException>(async () =>
             {
-                await workFactory.CreateWork((c) => Task.Delay(TimeSpan.FromSeconds(2), c));
+                //await workFactory.CreateWork((c) => Task.Delay(TimeSpan.FromSeconds(2), c));
+                await workFactory.CreateWork((c) => Task.Delay(TimeSpan.FromSeconds(2)));
             });
         }
     }

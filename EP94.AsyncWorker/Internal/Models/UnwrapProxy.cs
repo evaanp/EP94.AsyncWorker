@@ -33,7 +33,7 @@ namespace EP94.AsyncWorker.Internal.Models
             ParameterSubject.OnNext(Observable.Return(first));
         }
 
-        protected override Task DoExecuteAsync(ExecuteWorkItem<IResultWorkHandle<TFirstResult>, TNextResult> executeWorkItem)
+        protected override Task DoExecuteAsync(ExecuteWorkItem<IResultWorkHandle<TFirstResult>, TNextResult> executeWorkItem, CancellationToken cancellationToken)
         {
             Console.WriteLine();
             //if (executionStack.LastResult is TWrapped wrapped && wrapped is IWorkHandle<T> workHandle)

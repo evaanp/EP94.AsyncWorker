@@ -30,43 +30,40 @@ namespace EP94.AsyncWorker.Internal.Models
                 .Switch()
                 .Select(x =>
                 {
-                    //return Observable.FromAsync(() =>
-                    //{
-                        ExecuteWorkItem<TParameter, TResult> executeWorkItem = new ExecuteWorkItem<TParameter, TResult>(this, x);
-                        workScheduler.ScheduleWork(executeWorkItem, null);
-                    return executeWorkItem.ToOnceTask();
-                    //});
+                    ExecuteWorkItem<TParameter, TResult> executeWorkItem = new ExecuteWorkItem<TParameter, TResult>(this, x);
+                    return Observable.FromAsync(() =>
+                    {
+                        return executeWorkItem.ToOnceTask(() =>
+                        {
+                            workScheduler.ScheduleWork(executeWorkItem, null);
+                        }, CancellationToken);
+                    });
                 })
                 .Switch();
         }
 
-        protected override async Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem)
+        protected override async Task DoExecuteAsync(ExecuteWorkItem<TParameter, TResult> executeWorkItem, CancellationToken cancellationToken)
         {
             executeWorkItem.ExecutionCounter++;
             await SafeExecuteAsync(Work,
-                onSuccess: (result) => {
-                    executeWorkItem.ResultSubject.OnNext(result);
-                    executeWorkItem.ResultSubject.OnCompleted();
-                },
-                onCanceled: () =>
-                {
-                    executeWorkItem.ResultSubject.OnCompleted();
-                },
+                onSuccess: executeWorkItem.ResultSubject.OnNext,
+                onCanceled: executeWorkItem.SetCanceled,
                 onFail: e =>
                 {
                     OnFail?.Invoke(e);
                     if (executeWorkItem.ExecutionCounter <= RetryCount)
                     {
-                        double seconds = Math.Min(Math.Pow(2, executeWorkItem.ExecutionCounter), 30);
-                        WorkScheduler.ScheduleWork(executeWorkItem, DateTime.UtcNow.AddSeconds(seconds));
+                        double seconds = Math.Min(Math.Pow(2, executeWorkItem.ExecutionCounter), MaxRetryDelay);
+                        WorkScheduler.ScheduleWork(executeWorkItem, DateTimeOffset.UtcNow.AddSeconds(seconds));
                     }
                     else
                     {
-                        executeWorkItem.ResultSubject.OnError(e);
+                        executeWorkItem.SetException(e);
                     }
                 },
                 succeedsWhen: SucceedsWhen,
                 failsWhen: FailsWhen,
+                cancellationToken,
                 executeWorkItem.Parameter);
         }
 

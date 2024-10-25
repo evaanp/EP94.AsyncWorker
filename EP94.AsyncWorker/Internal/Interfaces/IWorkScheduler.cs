@@ -11,6 +11,6 @@ namespace EP94.AsyncWorker.Internal.Interfaces
     {
         TimeSpan? DefaultTimeout { get; }
         CancellationToken StopToken { get; }
-        void ScheduleWork(ExecuteWorkItem executeWorkItem, DateTime? dateTime);
+        void ScheduleWork(ExecuteWorkItem executeWorkItem, DateTimeOffset? dateTime);
     }
 }

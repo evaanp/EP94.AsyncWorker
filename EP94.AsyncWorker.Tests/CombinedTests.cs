@@ -16,7 +16,7 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestTrigger_ThenUnitOfWork_ReturnValue_SubscribeAfter<T>(T returnValue)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
+            ITrigger<T> trigger = workFactory.CreateTrigger<T>();
             List<T> received = [];
             IFuncWorkHandle<T, T> workHandle = trigger.ThenDo((value, c) =>
             {
@@ -34,7 +34,7 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestTrigger_ThenUnitOfWork_ReturnValue_SubscribeBefore<T>(T returnValue)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            ITrigger<T> trigger = workFactory.CreateTriggerAsync<T>();
+            ITrigger<T> trigger = workFactory.CreateTrigger<T>();
             List<T> received = [];
             IFuncWorkHandle<T, T> workHandle = trigger.ThenDo((value, c) =>
             {
@@ -53,7 +53,7 @@ namespace EP94.AsyncWorker.Tests
         public async Task TestMultipleLinkedWorkHandles(int number)
         {
             IWorkFactory workFactory = CreateDefaultWorkFactory();
-            ITrigger<int> trigger = workFactory.CreateTriggerAsync<int>();
+            ITrigger<int> trigger = workFactory.CreateTrigger<int>();
             IFuncWorkHandle<int, int> workHandle = trigger.ThenDo((i, c) => Task.FromResult(i));
             for (int i = 0; i < number; i++)
             {

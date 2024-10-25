@@ -9,24 +9,26 @@ using System.Threading.Tasks;
 
 namespace EP94.AsyncWorker.Internal.Models
 {
-    internal record ExecuteWorkItem(IUnitOfWork UnitOfWork)
+    internal class ExecuteWorkItem(IUnitOfWork unitOfWork)
     {
         public int ExecutionCounter { get; set; }
-        public DateTime TimeStamp { get; } = DateTime.UtcNow;
-        public override int GetHashCode()
-        {
-            if (UnitOfWork.HashCode.HasValue)
-            {
-                return UnitOfWork.HashCode.Value;
-            }
-            return base.GetHashCode();
-        }
+        public DateTimeOffset TimeStamp { get; } = DateTimeOffset.UtcNow;
+        public IUnitOfWork UnitOfWork { get; } = unitOfWork;
+        //public override int GetHashCode()
+        //{
+        //    if (UnitOfWork.HashCode.HasValue)
+        //    {
+        //        return UnitOfWork.HashCode.Value;
+        //    }
+        //    return base.GetHashCode();
+        //}
         public virtual void SetCanceled() { }
         public virtual void SetException(Exception e) { }
     }
-    internal record ExecuteWorkItem<TParam, TResult>(IUnitOfWork UnitOfWork, TParam Parameter) : ExecuteWorkItem(UnitOfWork), IObservable<TResult>
+    internal class ExecuteWorkItem<TParam, TResult>(IUnitOfWork unitOfWork, TParam parameter) : ExecuteWorkItem(unitOfWork), IObservable<TResult>
     {
-        public ISubject<TResult> ResultSubject = new Subject<TResult>();
+        public TParam Parameter { get; } = parameter;
+        public ISubject<TResult> ResultSubject = new ReplaySubject<TResult>(1);
         public IDisposable Subscribe(IObserver<TResult> observer)
         {
             return ResultSubject.Subscribe(observer);

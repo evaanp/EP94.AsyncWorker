@@ -16,7 +16,7 @@ namespace EP94.AsyncWorker.Internal.Models
 
         public async Task<ExecuteWorkItem> AwaitWorkAsync(CancellationToken cancellationToken)
         {
-            return await _executeWorkChannel.Reader.ReadAsync(cancellationToken);
+            return await _executeWorkChannel.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
         }
 
         public void ScheduleWork(ExecuteWorkItem executeWorkItem)
