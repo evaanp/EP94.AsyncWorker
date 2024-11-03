@@ -23,7 +23,7 @@ namespace EP94.AsyncWorker.Internal.Models
 
         protected override IObservable<TResult> RunObservable { get; }
 
-        public UnitOfWork(IWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : base(workScheduler, workFactory, name, cancellationToken)
+        public UnitOfWork(IWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken) : base(workScheduler, workFactory, cancellationToken)
         {
             Work = work;
             RunObservable = ParameterSubject
@@ -73,19 +73,19 @@ namespace EP94.AsyncWorker.Internal.Models
             //return new ReplaySubject<IObservable<TParameter>>(1);
         }
     }
-    internal class FuncUnitOfWork<TResult>(IFuncWorkDelegate<TResult> work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
-        : UnitOfWork<Unit, TResult>(work, workScheduler, workFactory, name, cancellationToken), IFuncWorkHandle<TResult>
+    internal class FuncUnitOfWork<TResult>(IFuncWorkDelegate<TResult> work, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
+        : UnitOfWork<Unit, TResult>(work, workScheduler, workFactory, cancellationToken), IFuncWorkHandle<TResult>
     { }
 
-    internal class FuncUnitOfWork<TParam, TResult>(IFuncWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
-        : UnitOfWork<TParam, TResult>(work, workScheduler, workFactory, name, cancellationToken), IFuncWorkHandle<TParam, TResult>
+    internal class FuncUnitOfWork<TParam, TResult>(IFuncWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
+        : UnitOfWork<TParam, TResult>(work, workScheduler, workFactory, cancellationToken), IFuncWorkHandle<TParam, TResult>
     { }
-    internal class ActionUnitOfWork<TParam>(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
-        : UnitOfWork<TParam, Unit>(work, workScheduler, workFactory, name, cancellationToken), IActionWorkHandle<TParam>
+    internal class ActionUnitOfWork<TParam>(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
+        : UnitOfWork<TParam, Unit>(work, workScheduler, workFactory, cancellationToken), IActionWorkHandle<TParam>
     { }
 
-    internal class ActionUnitOfWork(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
-        : UnitOfWork<Unit, Unit>(work, workScheduler, workFactory, name, cancellationToken), IActionWorkHandle 
+    internal class ActionUnitOfWork(IActionWorkDelegate work, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
+        : UnitOfWork<Unit, Unit>(work, workScheduler, workFactory, cancellationToken), IActionWorkHandle 
     {
 
     }

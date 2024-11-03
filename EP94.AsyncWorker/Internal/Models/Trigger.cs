@@ -24,14 +24,14 @@ namespace EP94.AsyncWorker.Internal.Models
         private T? _lastValue;
         private IEqualityComparer<T> _comparer;
 
-        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : base(workScheduler, workFactory, name, cancellationToken)
+        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : base(workScheduler, workFactory, cancellationToken)
         {
             _triggerOnlyOnChanges = triggerOnlyOnChanges;
             _subject.Subscribe(x => _lastValue = x);
             _comparer = equalityComparer;
         }
 
-        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, T? initialValue, string? name, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : this(workScheduler, workFactory, name, triggerOnlyOnChanges, equalityComparer, cancellationToken)
+        public Trigger(IWorkScheduler workScheduler, IWorkFactory workFactory, T? initialValue, bool triggerOnlyOnChanges, IEqualityComparer<T> equalityComparer, CancellationToken cancellationToken) : this(workScheduler, workFactory, triggerOnlyOnChanges, equalityComparer, cancellationToken)
         { 
             if (initialValue is not null)
             {

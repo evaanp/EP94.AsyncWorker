@@ -22,7 +22,7 @@ namespace EP94.AsyncWorker.Internal.Models
     {
         protected override IObservable<TNextResult> RunObservable { get; }
 
-        public UnwrapProxy(IResultWorkHandle<TFirstResult> first, IResultWorkHandle<TNextResult> next, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken) : base(workScheduler, workFactory, $"UnwrapProxy", cancellationToken)
+        public UnwrapProxy(IResultWorkHandle<TFirstResult> first, IResultWorkHandle<TNextResult> next, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken) : base(workScheduler, workFactory, cancellationToken)
         {
             RunObservable = ParameterSubject
                 .Select(x => x.Switch())

@@ -21,8 +21,8 @@ namespace EP94.AsyncWorker.Internal.Models
         private IResultWorkHandle<DateTimeOffset> _getNextTimeWorkHandle;
         private IWorkDelegate _task;
 
-        public TimeBasedTrigger(IFuncWorkDelegate<T> task, IResultWorkHandle<DateTimeOffset> dueTimeWorkHandle, IResultWorkHandle<DateTimeOffset> nextRunWorkHandle, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
-            : base(workScheduler, workFactory, name, cancellationToken)
+        public TimeBasedTrigger(IFuncWorkDelegate<T> task, IResultWorkHandle<DateTimeOffset> dueTimeWorkHandle, IResultWorkHandle<DateTimeOffset> nextRunWorkHandle, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
+            : base(workScheduler, workFactory, cancellationToken)
         {
             _task = task;
             _getNextTimeWorkHandle = nextRunWorkHandle;

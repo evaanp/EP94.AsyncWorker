@@ -21,7 +21,7 @@ namespace EP94.AsyncWorker.Internal.Models
         protected override IObservable<T> RunObservable => _subject;
         private ISubject<T> _subject = new Subject<T>();
 
-        public BackgroundWork(IWorkDelegate task, TimeSpan interval, Func<bool>? predicate, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : base(workScheduler, workFactory, name, cancellationToken)
+        public BackgroundWork(IWorkDelegate task, TimeSpan interval, Func<bool>? predicate, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken) : base(workScheduler, workFactory, cancellationToken)
         {
             _task = task;
             _interval = interval;
@@ -62,7 +62,7 @@ namespace EP94.AsyncWorker.Internal.Models
         }
     }
 
-    internal class BackgroundWork(IWorkDelegate task, TimeSpan interval, Func<bool>? predicate, IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken) : BackgroundWork<Unit>(task, interval, predicate, workScheduler, workFactory, name, cancellationToken), IBackgroundWork
+    internal class BackgroundWork(IWorkDelegate task, TimeSpan interval, Func<bool>? predicate, IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken) : BackgroundWork<Unit>(task, interval, predicate, workScheduler, workFactory, cancellationToken), IBackgroundWork
     {
 
     }

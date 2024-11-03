@@ -5,24 +5,98 @@ using EP94.AsyncWorker.Public;
 using EP94.AsyncWorker.Public.Interfaces;
 using EP94.AsyncWorker.Public.Models;
 using Microsoft.Extensions.Hosting;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Net.Sockets;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Reflection.Emit;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Channels;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
 
-IWorkFactory workFactory = IWorkFactory.Create(int.MaxValue, TaskScheduler.Current, TimeSpan.FromMilliseconds(1));
+IWorkFactory workFactory = IWorkFactory.Create(int.MaxValue, TaskScheduler.Current, TimeSpan.FromMilliseconds(1000));
 
-var work = workFactory.CreateWork(async (c) =>
+var now = workFactory.CreateWork(() => DateTimeOffset.Now);
+var tenSeconds = workFactory.CreateWork(() => DateTimeOffset.Now.AddSeconds(10));
+
+int counter = 0;
+
+var trigger = workFactory.CreateTimebasedTrigger<int>((c) =>
 {
-    await Task.Delay(10);
-});
+    return Task.FromResult(++counter);
+}, now, tenSeconds);
+
+trigger.ThenDo((i, c) =>
+{
+    Console.WriteLine(i);
+    return Task.CompletedTask;
+})
+    .Subscribe();
+
+//var stacktrace = Test22()();
+
+//Console.WriteLine();
+
+//Func<string, int> func = Test2;
+
+//Console.WriteLine(func);
+
+//int Test2(string value)
+//{
+//    return 5;
+//}
+
+//var work = workFactory.CreateWork(async (c) =>
+//{
+//    await Task.Delay(10);
+//});
+//StackFrameHelper helper = new StackFrameHelper();
+//Thread.CurrentT
+
+Func<object> Test22()
+{
+    var stackFrameHelperType = typeof(object).Assembly.GetType("System.Diagnostics.StackFrameHelper");
+
+    var GetStackFramesInternal = Type.GetType("System.Diagnostics.StackTrace, mscorlib").GetMethod("GetStackFramesInternal", BindingFlags.Static | BindingFlags.NonPublic);
+
+
+
+    var method = new DynamicMethod("GetStackTraceFast", typeof(object), new Type[0], typeof(StackTrace), true);
+
+
+    var generator = method.GetILGenerator();
+
+    generator.DeclareLocal(stackFrameHelperType);
+
+    //generator.Emit(OpCodes.Ldc_I4_0);
+
+    //generator.Emit(OpCodes.Call, typeof(Thread).GetProperty(nameof(Thread.CurrentThread), BindingFlags.Static | BindingFlags.Public).GetMethod);
+    generator.Emit(OpCodes.Ldnull);
+
+    generator.Emit(OpCodes.Newobj, stackFrameHelperType.GetConstructor(new[] { typeof(Thread) }));
+
+    generator.Emit(OpCodes.Stloc_0);
+
+    generator.Emit(OpCodes.Ldloc_0);
+
+    generator.Emit(OpCodes.Ldc_I4_0);
+
+    generator.Emit(OpCodes.Ldnull);
+
+    generator.Emit(OpCodes.Call, GetStackFramesInternal);
+
+    generator.Emit(OpCodes.Ldloc_0);
+
+    generator.Emit(OpCodes.Ret);
+
+    return (Func<object>)method.CreateDelegate(typeof(Func<object>));
+}
 
 //while (true)
 //{
@@ -42,12 +116,12 @@ var work = workFactory.CreateWork(async (c) =>
 //    await Task.Delay(10);
 //});
 //Console.WriteLine();
-while (true)
-{
-    await Test(workFactory);
-    Console.WriteLine("Finish");
-    await Task.Delay(1000);
-}
+//while (true)
+//{
+//    await Test(workFactory);
+//    Console.WriteLine("Finish");
+//    await Task.Delay(1000);
+//}
 //await Task.WhenAll(Enumerable.Range(0, 10).Select(x => Task.Run(() => Test(workFactory))));
 
 async Task Test(IWorkFactory workFactory)
@@ -64,7 +138,7 @@ async Task Test(IWorkFactory workFactory)
             await Task.Delay(10, c);
             results.Add(expectedValues[index]);
             //return Task.CompletedTask;
-        }, $"Item_{index}", cancelToken.Token)
+        }, cancelToken.Token)
             .ConfigureRetainResult(RetainResult.RetainLast);
         workHandles.Add(workHandle);
     }

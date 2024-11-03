@@ -25,7 +25,6 @@ namespace EP94.AsyncWorker.Internal.Models
         public int? HashCode { get; private set; }
         public TimeSpan? DebounceTime { get; private set; }
         public IDependOnCondition? DependsOn { get; protected set; }
-        public string? Name { get; }
         public Predicate<TResult>? SucceedsWhen { get; set; }
         public Predicate<TResult>? FailsWhen { get; set; }
         public Action<Exception>? OnFail { get; set; }
@@ -40,10 +39,9 @@ namespace EP94.AsyncWorker.Internal.Models
 
         //protected abstract IObservable<TResult> RunObservable { get; }
 
-        public WorkBase(IWorkScheduler workScheduler, IWorkFactory workFactory, string? name, CancellationToken cancellationToken)
+        public WorkBase(IWorkScheduler workScheduler, IWorkFactory workFactory, CancellationToken cancellationToken)
             : base (cancellationToken)
         {
-            Name = name;
             CancellationToken = cancellationToken;
             WorkScheduler = workScheduler;
             _workFactory = workFactory;
