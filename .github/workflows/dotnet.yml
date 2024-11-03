@@ -16,7 +16,7 @@ jobs:
         dotnet-version:  '8.0'  # Pas aan naar jouw .NET versie
     - name: Update version in csproj
       run: |
-        sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" EP94.AsyncWorker.csproj
+        sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" EP94.AsyncWorker/EP94.AsyncWorker.csproj
     - name: Build
       run: dotnet build --configuration Release
     - name: Test
