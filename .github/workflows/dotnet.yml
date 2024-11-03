@@ -17,25 +17,15 @@ jobs:
         dotnet-version:  '8.0'  # Pas aan naar jouw .NET versie
     - name: Update version in csproj
       run: |
-        sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" projectName.csproj
+        sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" EP94.AsyncWorker.csproj
     - name: Build
       run: dotnet build --configuration Release
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Pack nugets
       run: dotnet pack EP94.AsyncWorker -c Release --no-build --output .
-    - name: Publish to NuGet
-      uses: NuGet/setup-nuget@v2
-      with:
-        nuget-version: latest
-    - uses: actions/upload-artifact@v3
-      with:
-        name: nuget
-        path: ./nupkg/*.nupkg
-    - uses: NuGet/dotnet-nuget-auth@v1
-      with:
-        api-key: ${{ secrets.NUGET_API_KEY }}
-    - run: dotnet nuget push ./nupkg/*.nupkg -s https://api.nuget.org/v3/index.json
+    - name: Push to NuGet
+      run: dotnet nuget push "*.nupkg" --api-key ${{secrets.nuget_api_key}} --source https://api.nuget.org/v3/index.json
     - name: Create Release
       uses: actions/create-release@v1
       with:
@@ -48,5 +38,5 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./nupkg/*.nupkg
+        asset_path: ./*.nupkg
         asset_name: ${{ github.ref }}.nupkg
