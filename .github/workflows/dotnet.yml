@@ -2,7 +2,7 @@ name: Build, Test, Publish to NuGet, and Create Release
 
 on:
   release:
-    - 'v*'
+    types: [published]
 
 jobs:
   build:
