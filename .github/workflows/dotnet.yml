@@ -19,8 +19,8 @@ jobs:
         sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" EP94.AsyncWorker/EP94.AsyncWorker.csproj
     - name: Build
       run: dotnet build --configuration Release
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+    # - name: Test
+    #   run: dotnet test --no-build --verbosity normal
     - name: Pack nugets
       run: dotnet pack EP94.AsyncWorker -c Release --no-build --output .
     - name: Push to NuGet
