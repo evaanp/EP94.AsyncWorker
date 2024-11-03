@@ -104,7 +104,7 @@ namespace EP94.AsyncWorker.Tests
                 {
                     results.Add(expectedValues[index]);
                     return Task.CompletedTask;
-                }, $"Item_{index}", cancelToken.Token)
+                }, cancelToken.Token)
                     .ConfigureRetainResult(RetainResult.RetainLast);
                 workHandles.Add(workHandle);
             }
@@ -170,7 +170,7 @@ namespace EP94.AsyncWorker.Tests
                 {
                     results.Add(values[index]);
                     return Task.CompletedTask;
-                }, name: index.ToString())
+                })
                     .ConfigureDependOn(trigger, value => value)
                     .ConfigureDebounce(nameof(TestSameHashCode).GetHashCode(), TimeSpan.FromMilliseconds(100));
 
