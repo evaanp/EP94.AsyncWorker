@@ -1,9 +1,8 @@
 name: Build, Test, Publish to NuGet, and Create Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    - 'v*'
 
 jobs:
   build:
