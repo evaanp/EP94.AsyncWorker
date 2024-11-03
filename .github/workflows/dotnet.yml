@@ -1,0 +1,27 @@
+name: Build, Test, Publish to NuGet, and Create Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version:  '8.0'  # Pas aan naar jouw .NET versie
+    - name: Update version in csproj
+      run: |
+        sed -i "s/\(<Version>\([0-9]\+\.\)\{2\}\)\([0-9]\+\)/\1${{github.run_number}}/" EP94.AsyncWorker/EP94.AsyncWorker.csproj
+    - name: Build
+      run: dotnet build --configuration Release
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+    - name: Pack nugets
+      run: dotnet pack EP94.AsyncWorker -c Release --no-build --output .
+    - name: Push to NuGet
+      run: dotnet nuget push "*.nupkg" --api-key ${{secrets.nuget_api_key}} --source https://api.nuget.org/v3/index.json
